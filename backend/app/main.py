@@ -1,30 +1,12 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
 from uuid import uuid4
+
+from .schemas import CreateSessionRequest, SessionResponse, JoinSessionRequest
 
 app = FastAPI()
 
-# In-memory "DB"
 SESSIONS = {}
-USERS = {}
 
-# Pydantic schemas
-class CreateSessionRequest(BaseModel):
-    host_name: str
-
-class SessionResponse(BaseModel):
-    id: str
-    host_name: str
-    participants: list[str]
-
-class JoinSessionRequest(BaseModel):
-    user_name: str
-
-class UserResponse(BaseModel):
-    id: str
-    user_name: str
-
-# Endpoints
 @app.post("/sessions", response_model=SessionResponse)
 def create_session(req: CreateSessionRequest):
     session_id = str(uuid4())
@@ -39,13 +21,10 @@ def create_session(req: CreateSessionRequest):
 def join_session(session_id: str, req: JoinSessionRequest):
     session = SESSIONS.get(session_id)
     if not session:
-        # FastAPI handles proper error responses
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Session not found")
-
-    # Ensure participants list exists
-    if "participants" not in session:
-        session["participants"] = []
-
     session["participants"].append(req.user_name)
     return session
+
+@app.get("/sessions", response_model=list[SessionResponse])
+def list_sessions():
+    return list(SESSIONS.values())
