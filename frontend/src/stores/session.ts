@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import axios from "axios";
 
 import { createSession, getSession, joinSession, startSession } from "../lib/api";
-import type { SessionResponse } from "../types";
+import type { CreateSessionRequest, SessionResponse } from "../types";
 
 export const useSessionStore = defineStore("session", () => {
   const session = ref<SessionResponse | null>(null);
@@ -39,11 +39,20 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
-  async function create(hostName: string): Promise<void> {
-    const trimmed = hostName.trim();
-    const data = await handle(() => createSession({ host_name: trimmed }));
+  async function create(payload: CreateSessionRequest): Promise<void> {
+    const normalized: CreateSessionRequest = {
+      host_name: payload.host_name.trim(),
+      location_text: payload.location_text.trim(),
+      cuisine: payload.cuisine?.trim() || undefined,
+      price: payload.price?.trim() || undefined,
+      radius_meters:
+        typeof payload.radius_miles === "number"
+          ? Math.round(payload.radius_miles * 1609.34)
+          : payload.radius_meters,
+    };
+    const data = await handle(() => createSession(normalized));
     session.value = data;
-    currentUser.value = trimmed;
+    currentUser.value = normalized.host_name;
   }
 
   async function join(roomCode: string, userName: string): Promise<void> {

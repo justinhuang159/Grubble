@@ -3,14 +3,17 @@ import string
 from collections.abc import Generator
 import os
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from . import config  # noqa: F401
 from .database import SessionLocal
-from .models import Participant, Session as SessionModel
+from .integrations.yelp_client import MissingRapidAPIConfigError, YelpClient, YelpClientError
+from .models import Participant, Restaurant, Session as SessionModel, YelpQueryCache
 from .schemas import CreateSessionRequest, JoinSessionRequest, SessionResponse, StartSessionRequest
 
 app = FastAPI()
@@ -68,6 +71,10 @@ def build_response(session: SessionModel) -> SessionResponse:
         room_code=session.room_code,
         host_name=session.host_name,
         status=session.status,
+        cuisine=session.cuisine,
+        price=session.price,
+        radius_meters=session.radius_meters,
+        location_text=session.location_text,
         participants=participants,
     )
 
@@ -82,10 +89,147 @@ def generate_room_code(db: Session, length: int = 6) -> str:
     raise HTTPException(status_code=500, detail="Failed to generate unique room code")
 
 
+def is_mock_yelp_enabled() -> bool:
+    return os.getenv("USE_MOCK_YELP", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def build_query_key(*, term: str, location_text: str, price: str | None, radius_meters: int | None) -> str:
+    normalized_price = (price or "").strip()
+    normalized_radius = str(radius_meters or "")
+    return "|".join([term.strip().lower(), location_text.strip().lower(), normalized_price, normalized_radius])
+
+
+def get_mock_businesses(term: str, location_text: str) -> list[dict]:
+    return [
+        {
+            "id": "mock-1",
+            "name": f"{term.title()} House",
+            "image_url": None,
+            "location": {"display_address": [f"123 Main St", location_text]},
+            "coordinates": {"latitude": 37.7749, "longitude": -122.4194},
+            "price": "$$",
+            "rating": 4.4,
+            "review_count": 180,
+        },
+        {
+            "id": "mock-2",
+            "name": f"{term.title()} Corner",
+            "image_url": None,
+            "location": {"display_address": [f"456 Market St", location_text]},
+            "coordinates": {"latitude": 37.7849, "longitude": -122.4094},
+            "price": "$",
+            "rating": 4.1,
+            "review_count": 95,
+        },
+    ]
+
+
+def is_cache_row_fresh(created_at: datetime, cutoff: datetime) -> bool:
+    row_time = created_at
+    if row_time.tzinfo is None:
+        row_time = row_time.replace(tzinfo=timezone.utc)
+    return row_time >= cutoff
+
+
+def get_yelp_client_from_env() -> YelpClient:
+    api_key = os.getenv("RAPIDAPI_KEY")
+    api_host = os.getenv("RAPIDAPI_HOST")
+    base_url = os.getenv("RAPIDAPI_YELP_BASE_URL", "https://yelp-business-api.p.rapidapi.com")
+    if not api_key or not api_host:
+        raise MissingRapidAPIConfigError("Missing RAPIDAPI_KEY or RAPIDAPI_HOST")
+    return YelpClient(api_key=api_key, api_host=api_host, base_url=base_url)
+
+
+def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
+    if not session.location_text:
+        raise HTTPException(status_code=400, detail="location_text is required to start a session")
+
+    term = session.cuisine or "restaurants"
+    if is_mock_yelp_enabled():
+        businesses = get_mock_businesses(term=term, location_text=session.location_text)
+    else:
+        try:
+            cache_ttl_minutes = int(os.getenv("YELP_CACHE_TTL_MINUTES", "1440"))
+        except ValueError:
+            cache_ttl_minutes = 1440
+        cache_cutoff = datetime.now(timezone.utc) - timedelta(minutes=cache_ttl_minutes)
+        query_key = build_query_key(
+            term=term,
+            location_text=session.location_text,
+            price=session.price,
+            radius_meters=session.radius_meters,
+        )
+        cache_row = db.scalar(select(YelpQueryCache).where(YelpQueryCache.query_key == query_key))
+        if cache_row and is_cache_row_fresh(cache_row.created_at, cache_cutoff) and isinstance(cache_row.results, list):
+            businesses = cache_row.results
+        else:
+            client = get_yelp_client_from_env()
+            businesses = client.search_businesses(
+                term=term,
+                location=session.location_text,
+                price=session.price,
+                radius_meters=session.radius_meters,
+                limit=30,
+            )
+            if cache_row:
+                cache_row.results = businesses
+                cache_row.created_at = datetime.now(timezone.utc)
+            else:
+                db.add(
+                    YelpQueryCache(
+                        query_key=query_key,
+                        term=term,
+                        location_text=session.location_text,
+                        price=session.price,
+                        radius_meters=session.radius_meters,
+                        results=businesses,
+                    )
+                )
+
+    if not businesses:
+        raise HTTPException(status_code=404, detail="No restaurants found for this session")
+
+    db.execute(delete(Restaurant).where(Restaurant.session_id == session.id))
+    for idx, item in enumerate(businesses):
+        location = item.get("location") or {}
+        coordinates = item.get("coordinates") or {}
+        display_address = location.get("display_address")
+        if isinstance(display_address, list):
+            address = ", ".join(str(part) for part in display_address)
+        else:
+            address = location.get("address1")
+
+        external_id = str(item.get("id") or item.get("alias") or f"generated-{idx}")
+        db.add(
+            Restaurant(
+                session_id=session.id,
+                external_id=external_id,
+                name=str(item.get("name") or "Unknown Restaurant"),
+                image_url=item.get("image_url"),
+                address=address,
+                lat=coordinates.get("latitude"),
+                lng=coordinates.get("longitude"),
+                price=item.get("price"),
+                rating=item.get("rating"),
+                review_count=item.get("review_count"),
+                source_payload=item,
+            )
+        )
+    return len(businesses)
+
+
 @app.post("/sessions", response_model=SessionResponse)
 def create_session(req: CreateSessionRequest, db: Session = Depends(get_db)):
     room_code = generate_room_code(db)
-    session = SessionModel(room_code=room_code, host_name=req.host_name, status="waiting")
+    session = SessionModel(
+        room_code=room_code,
+        host_name=req.host_name,
+        status="waiting",
+        cuisine=req.cuisine,
+        price=req.price,
+        radius_meters=req.radius_meters,
+        location_text=req.location_text,
+    )
     session.participants.append(Participant(user_name=req.host_name))
     db.add(session)
     db.commit()
@@ -123,6 +267,13 @@ async def start_session(room_code: str, req: StartSessionRequest, db: Session = 
         raise HTTPException(status_code=403, detail="Only the host can start this session")
     if session.status != "waiting":
         raise HTTPException(status_code=409, detail="Session can only be started from waiting state")
+
+    try:
+        cache_restaurants_for_session(db, session)
+    except MissingRapidAPIConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except YelpClientError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     session.status = "active"
     db.commit()
