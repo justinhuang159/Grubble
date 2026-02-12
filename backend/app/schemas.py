@@ -1,22 +1,20 @@
-# schemas.py
-from pydantic import BaseModel
 from typing import List
 
-# Request to create a session
-class CreateSessionRequest(BaseModel):
-    host_name: str
+from pydantic import BaseModel, ConfigDict, Field
 
-# Response when a session is created or returned
+
+class CreateSessionRequest(BaseModel):
+    host_name: str = Field(min_length=1, max_length=64)
+
+
+class JoinSessionRequest(BaseModel):
+    user_name: str = Field(min_length=1, max_length=64)
+
+
 class SessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
+    room_code: str
     host_name: str
     participants: List[str]
-
-# Request to join a session
-class JoinSessionRequest(BaseModel):
-    user_name: str
-
-# Response representing a user (optional for future use)
-class UserResponse(BaseModel):
-    id: str
-    user_name: str
