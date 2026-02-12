@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .database import SessionLocal
 from .models import Participant, Session as SessionModel
-from .schemas import CreateSessionRequest, JoinSessionRequest, SessionResponse
+from .schemas import CreateSessionRequest, JoinSessionRequest, SessionResponse, StartSessionRequest
 
 app = FastAPI()
 
@@ -27,6 +27,7 @@ def build_response(session: SessionModel) -> SessionResponse:
         id=session.id,
         room_code=session.room_code,
         host_name=session.host_name,
+        status=session.status,
         participants=participants,
     )
 
@@ -68,6 +69,22 @@ def join_session(room_code: str, req: JoinSessionRequest, db: Session = Depends(
         raise HTTPException(status_code=409, detail="Participant name already exists in this session")
 
     session.participants.append(Participant(user_name=req.user_name))
+    db.commit()
+    db.refresh(session)
+    return build_response(session)
+
+
+@app.post("/sessions/{room_code}/start", response_model=SessionResponse)
+def start_session(room_code: str, req: StartSessionRequest, db: Session = Depends(get_db)):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if req.host_name != session.host_name:
+        raise HTTPException(status_code=403, detail="Only the host can start this session")
+    if session.status != "waiting":
+        raise HTTPException(status_code=409, detail="Session can only be started from waiting state")
+
+    session.status = "active"
     db.commit()
     db.refresh(session)
     return build_response(session)
