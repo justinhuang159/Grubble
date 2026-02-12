@@ -7,14 +7,23 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from . import config  # noqa: F401
 from .database import SessionLocal
 from .integrations.yelp_client import MissingRapidAPIConfigError, YelpClient, YelpClientError
-from .models import Participant, Restaurant, Session as SessionModel, YelpQueryCache
-from .schemas import CreateSessionRequest, JoinSessionRequest, SessionResponse, StartSessionRequest
+from .models import Participant, Restaurant, Session as SessionModel, Vote, YelpQueryCache
+from .schemas import (
+    CreateSessionRequest,
+    JoinSessionRequest,
+    NextRestaurantResponse,
+    RestaurantCard,
+    SessionResponse,
+    StartSessionRequest,
+    VoteRequest,
+    VoteResponse,
+)
 
 app = FastAPI()
 
@@ -218,6 +227,31 @@ def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
     return len(businesses)
 
 
+def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
+    return RestaurantCard(
+        id=restaurant.id,
+        name=restaurant.name,
+        image_url=restaurant.image_url,
+        address=restaurant.address,
+        price=restaurant.price,
+        rating=restaurant.rating,
+        review_count=restaurant.review_count,
+    )
+
+
+def get_next_restaurant_for_user(db: Session, session_id: str, user_name: str) -> Restaurant | None:
+    voted_restaurant_ids = select(Vote.restaurant_id).where(
+        Vote.session_id == session_id,
+        Vote.participant_name == user_name,
+    )
+    return db.scalar(
+        select(Restaurant)
+        .where(Restaurant.session_id == session_id, ~Restaurant.id.in_(voted_restaurant_ids))
+        .order_by(Restaurant.id.asc())
+        .limit(1)
+    )
+
+
 @app.post("/sessions", response_model=SessionResponse)
 def create_session(req: CreateSessionRequest, db: Session = Depends(get_db)):
     room_code = generate_room_code(db)
@@ -284,6 +318,132 @@ async def start_session(room_code: str, req: StartSessionRequest, db: Session = 
         {"event": "session_started", "session": response.model_dump()},
     )
     return response
+
+
+@app.get("/sessions/{room_code}/restaurants/next", response_model=NextRestaurantResponse)
+def get_next_restaurant(room_code: str, user_name: str, db: Session = Depends(get_db)):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "active":
+        raise HTTPException(status_code=409, detail="Session is not active")
+
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.session_id == session.id,
+            Participant.user_name == user_name,
+        )
+    )
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found in session")
+
+    next_restaurant = get_next_restaurant_for_user(db, session.id, user_name)
+    if not next_restaurant:
+        return NextRestaurantResponse(restaurant=None)
+    return NextRestaurantResponse(restaurant=build_restaurant_card(next_restaurant))
+
+
+@app.post("/sessions/{room_code}/votes", response_model=VoteResponse)
+async def submit_vote(room_code: str, req: VoteRequest, db: Session = Depends(get_db)):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "active":
+        raise HTTPException(status_code=409, detail="Session is not active")
+
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.session_id == session.id,
+            Participant.user_name == req.user_name,
+        )
+    )
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found in session")
+
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.id == req.restaurant_id,
+            Restaurant.session_id == session.id,
+        )
+    )
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found in session")
+
+    existing_vote = db.scalar(
+        select(Vote).where(
+            Vote.session_id == session.id,
+            Vote.participant_name == req.user_name,
+            Vote.restaurant_id == req.restaurant_id,
+        )
+    )
+    duplicate = False
+    if existing_vote:
+        if existing_vote.decision != req.decision:
+            raise HTTPException(status_code=409, detail="Vote already exists with different decision")
+        duplicate = True
+    else:
+        db.add(
+            Vote(
+                session_id=session.id,
+                participant_name=req.user_name,
+                restaurant_id=req.restaurant_id,
+                decision=req.decision,
+            )
+        )
+        db.flush()
+
+    total_participants = db.scalar(
+        select(func.count(Participant.id)).where(Participant.session_id == session.id)
+    ) or 0
+    votes_submitted_for_restaurant = db.scalar(
+        select(func.count(Vote.id)).where(
+            Vote.session_id == session.id,
+            Vote.restaurant_id == req.restaurant_id,
+        )
+    ) or 0
+    yes_votes_for_restaurant = db.scalar(
+        select(func.count(Vote.id)).where(
+            Vote.session_id == session.id,
+            Vote.restaurant_id == req.restaurant_id,
+            Vote.decision == "yes",
+        )
+    ) or 0
+
+    matched = total_participants > 0 and yes_votes_for_restaurant == total_participants
+    matched_restaurant_id = req.restaurant_id if matched else None
+
+    next_restaurant = get_next_restaurant_for_user(db, session.id, req.user_name)
+    db.commit()
+
+    await ws_manager.broadcast(
+        room_code,
+        {
+            "event": "vote_progress",
+            "restaurant_id": req.restaurant_id,
+            "votes_submitted_for_restaurant": votes_submitted_for_restaurant,
+            "yes_votes_for_restaurant": yes_votes_for_restaurant,
+            "total_participants": total_participants,
+        },
+    )
+    if matched:
+        await ws_manager.broadcast(
+            room_code,
+            {
+                "event": "match_found",
+                "restaurant_id": req.restaurant_id,
+                "total_participants": total_participants,
+            },
+        )
+
+    return VoteResponse(
+        duplicate=duplicate,
+        matched=matched,
+        matched_restaurant_id=matched_restaurant_id,
+        total_participants=total_participants,
+        votes_submitted_for_restaurant=votes_submitted_for_restaurant,
+        yes_votes_for_restaurant=yes_votes_for_restaurant,
+        next_restaurant=build_restaurant_card(next_restaurant) if next_restaurant else None,
+    )
 
 
 @app.get("/sessions/{room_code}", response_model=SessionResponse)

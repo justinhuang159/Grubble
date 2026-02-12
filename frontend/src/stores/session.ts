@@ -2,14 +2,24 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import axios from "axios";
 
-import { createSession, getSession, joinSession, startSession } from "../lib/api";
-import type { CreateSessionRequest, SessionResponse } from "../types";
+import {
+  createSession,
+  getNextRestaurant,
+  getSession,
+  joinSession,
+  startSession,
+  submitVote,
+} from "../lib/api";
+import type { CreateSessionRequest, RestaurantCard, SessionResponse, VoteResponse } from "../types";
 
 export const useSessionStore = defineStore("session", () => {
   const session = ref<SessionResponse | null>(null);
   const currentUser = ref<string>("");
   const loading = ref(false);
+  const voteLoading = ref(false);
   const error = ref<string>("");
+  const currentRestaurant = ref<RestaurantCard | null>(null);
+  const latestVoteResult = ref<VoteResponse | null>(null);
 
   const isHost = computed(() => {
     if (!session.value || !currentUser.value) {
@@ -39,6 +49,18 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
+  function setErrorFromUnknown(err: unknown): void {
+    if (axios.isAxiosError(err)) {
+      const detail = err.response?.data?.detail;
+      error.value =
+        typeof detail === "string"
+          ? detail
+          : `Request failed (${err.response?.status ?? "network error"}).`;
+      return;
+    }
+    error.value = "Request failed. Please try again.";
+  }
+
   async function create(payload: CreateSessionRequest): Promise<void> {
     const normalized: CreateSessionRequest = {
       host_name: payload.host_name.trim(),
@@ -61,6 +83,8 @@ export const useSessionStore = defineStore("session", () => {
     const data = await handle(() => joinSession(trimmedRoomCode, { user_name: trimmedName }));
     session.value = data;
     currentUser.value = trimmedName;
+    currentRestaurant.value = null;
+    latestVoteResult.value = null;
   }
 
   async function refresh(): Promise<void> {
@@ -79,22 +103,65 @@ export const useSessionStore = defineStore("session", () => {
       startSession(session.value!.room_code, { host_name: currentUser.value }),
     );
     session.value = data;
+    currentRestaurant.value = null;
+    latestVoteResult.value = null;
   }
 
   function setSession(data: SessionResponse): void {
     session.value = data;
   }
 
+  async function loadNextRestaurant(): Promise<void> {
+    if (!session.value || !currentUser.value) {
+      return;
+    }
+    error.value = "";
+    try {
+      const data = await getNextRestaurant(session.value.room_code, currentUser.value);
+      currentRestaurant.value = data.restaurant;
+    } catch (err) {
+      setErrorFromUnknown(err);
+      throw err;
+    }
+  }
+
+  async function vote(decision: "yes" | "no"): Promise<void> {
+    if (!session.value || !currentUser.value || !currentRestaurant.value) {
+      return;
+    }
+    voteLoading.value = true;
+    error.value = "";
+    try {
+      const data = await submitVote(session.value.room_code, {
+        user_name: currentUser.value,
+        restaurant_id: currentRestaurant.value.id,
+        decision,
+      });
+      latestVoteResult.value = data;
+      currentRestaurant.value = data.next_restaurant;
+    } catch (err) {
+      setErrorFromUnknown(err);
+      throw err;
+    } finally {
+      voteLoading.value = false;
+    }
+  }
+
   return {
     session,
     currentUser,
     loading,
+    voteLoading,
     error,
+    currentRestaurant,
+    latestVoteResult,
     isHost,
     create,
     join,
     refresh,
     start,
     setSession,
+    loadNextRestaurant,
+    vote,
   };
 });

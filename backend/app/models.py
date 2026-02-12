@@ -31,6 +31,11 @@ class Session(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    votes: Mapped[list["Vote"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Participant(Base):
@@ -78,6 +83,7 @@ class Restaurant(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     session: Mapped[Session] = relationship(back_populates="restaurants")
+    votes: Mapped[list["Vote"]] = relationship(back_populates="restaurant")
 
 
 class YelpQueryCache(Base):
@@ -91,3 +97,29 @@ class YelpQueryCache(Base):
     radius_meters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     results: Mapped[list] = mapped_column(JSON, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Vote(Base):
+    __tablename__ = "votes"
+    __table_args__ = (
+        UniqueConstraint("session_id", "participant_name", "restaurant_id", name="uq_votes_session_participant_restaurant"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    participant_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    decision: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    session: Mapped[Session] = relationship(back_populates="votes")
+    restaurant: Mapped[Restaurant] = relationship(back_populates="votes")
