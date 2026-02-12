@@ -2,12 +2,47 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { useSessionStore } from "../stores/session";
+import type { SessionResponse } from "../types";
 
 const store = useSessionStore();
 const startLoading = ref(false);
 let timer: ReturnType<typeof setInterval> | null = null;
+let socket: WebSocket | null = null;
+const socketConnected = ref(false);
 
 const participantCount = computed(() => store.session?.participants.length ?? 0);
+
+function buildWsUrl(roomCode: string): string {
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+  const wsBase = apiBase.replace(/^http/, "ws");
+  return `${wsBase}/ws/sessions/${roomCode}`;
+}
+
+function connectSocket(roomCode: string) {
+  socket = new WebSocket(buildWsUrl(roomCode));
+
+  socket.onopen = () => {
+    socketConnected.value = true;
+  };
+
+  socket.onclose = () => {
+    socketConnected.value = false;
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as {
+        event?: string;
+        session?: SessionResponse;
+      };
+      if (message.event === "session_started" && message.session) {
+        store.setSession(message.session);
+      }
+    } catch {
+      // Ignore malformed messages and rely on polling fallback.
+    }
+  };
+}
 
 async function startSession() {
   startLoading.value = true;
@@ -20,17 +55,21 @@ async function startSession() {
 
 onMounted(async () => {
   await store.refresh();
+  if (store.session) {
+    connectSocket(store.session.room_code);
+  }
   timer = setInterval(() => {
     store.refresh().catch(() => {
       // Store error message is enough for this MVP view.
     });
-  }, 2500);
+  }, 5000);
 });
 
 onUnmounted(() => {
   if (timer) {
     clearInterval(timer);
   }
+  socket?.close();
 });
 </script>
 

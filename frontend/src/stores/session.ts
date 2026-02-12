@@ -72,6 +72,10 @@ export const useSessionStore = defineStore("session", () => {
     session.value = data;
   }
 
+  function setSession(data: SessionResponse): void {
+    session.value = data;
+  }
+
   return {
     session,
     currentUser,
@@ -82,5 +86,6 @@ export const useSessionStore = defineStore("session", () => {
     join,
     refresh,
     start,
+    setSession,
   };
 });

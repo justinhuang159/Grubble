@@ -2,8 +2,9 @@ import random
 import string
 from collections.abc import Generator
 import os
+from collections import defaultdict
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,6 +23,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self._connections: dict[str, set[WebSocket]] = defaultdict(set)
+
+    async def connect(self, room_code: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._connections[room_code].add(websocket)
+
+    def disconnect(self, room_code: str, websocket: WebSocket) -> None:
+        room_connections = self._connections.get(room_code)
+        if not room_connections:
+            return
+        room_connections.discard(websocket)
+        if not room_connections:
+            self._connections.pop(room_code, None)
+
+    async def broadcast(self, room_code: str, message: dict) -> None:
+        room_connections = list(self._connections.get(room_code, set()))
+        for connection in room_connections:
+            try:
+                await connection.send_json(message)
+            except RuntimeError:
+                self.disconnect(room_code, connection)
+
+
+ws_manager = ConnectionManager()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -86,7 +115,7 @@ def join_session(room_code: str, req: JoinSessionRequest, db: Session = Depends(
 
 
 @app.post("/sessions/{room_code}/start", response_model=SessionResponse)
-def start_session(room_code: str, req: StartSessionRequest, db: Session = Depends(get_db)):
+async def start_session(room_code: str, req: StartSessionRequest, db: Session = Depends(get_db)):
     session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -98,7 +127,12 @@ def start_session(room_code: str, req: StartSessionRequest, db: Session = Depend
     session.status = "active"
     db.commit()
     db.refresh(session)
-    return build_response(session)
+    response = build_response(session)
+    await ws_manager.broadcast(
+        room_code,
+        {"event": "session_started", "session": response.model_dump()},
+    )
+    return response
 
 
 @app.get("/sessions/{room_code}", response_model=SessionResponse)
@@ -113,3 +147,22 @@ def get_session(room_code: str, db: Session = Depends(get_db)):
 def list_sessions(db: Session = Depends(get_db)):
     sessions = db.scalars(select(SessionModel)).all()
     return [build_response(session) for session in sessions]
+
+
+@app.websocket("/ws/sessions/{room_code}")
+async def session_updates_socket(websocket: WebSocket, room_code: str):
+    db = SessionLocal()
+    try:
+        session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+        if not session:
+            await websocket.close(code=1008, reason="Session not found")
+            return
+    finally:
+        db.close()
+
+    await ws_manager.connect(room_code, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(room_code, websocket)
