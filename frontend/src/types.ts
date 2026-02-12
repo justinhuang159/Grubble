@@ -1,0 +1,21 @@
+export type SessionStatus = "waiting" | "active" | "paused" | "ended";
+
+export interface CreateSessionRequest {
+  host_name: string;
+}
+
+export interface JoinSessionRequest {
+  user_name: string;
+}
+
+export interface StartSessionRequest {
+  host_name: string;
+}
+
+export interface SessionResponse {
+  id: string;
+  room_code: string;
+  host_name: string;
+  status: SessionStatus;
+  participants: string[];
+}

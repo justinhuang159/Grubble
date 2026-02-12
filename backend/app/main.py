@@ -1,8 +1,10 @@
 import random
 import string
 from collections.abc import Generator
+import os
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,15 @@ from .models import Participant, Session as SessionModel
 from .schemas import CreateSessionRequest, JoinSessionRequest, SessionResponse, StartSessionRequest
 
 app = FastAPI()
+
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[frontend_origin, "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_db() -> Generator[Session, None, None]:
