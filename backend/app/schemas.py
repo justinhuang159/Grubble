@@ -62,3 +62,14 @@ class VoteResponse(BaseModel):
     votes_submitted_for_restaurant: int
     yes_votes_for_restaurant: int
     next_restaurant: RestaurantCard | None
+
+
+class SessionResultItem(BaseModel):
+    restaurant: RestaurantCard
+    yes_votes: int
+    total_votes: int
+
+
+class SessionResultsResponse(BaseModel):
+    total_participants: int
+    results: List[SessionResultItem]

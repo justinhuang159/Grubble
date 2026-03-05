@@ -47,6 +47,17 @@ export interface VoteResponse {
   next_restaurant: RestaurantCard | null;
 }
 
+export interface SessionResultItem {
+  restaurant: RestaurantCard;
+  yes_votes: number;
+  total_votes: number;
+}
+
+export interface SessionResultsResponse {
+  total_participants: number;
+  results: SessionResultItem[];
+}
+
 export interface SessionResponse {
   id: string;
   room_code: string;

@@ -3,6 +3,7 @@ import type {
   CreateSessionRequest,
   JoinSessionRequest,
   NextRestaurantResponse,
+  SessionResultsResponse,
   SessionResponse,
   StartSessionRequest,
   VoteRequest,
@@ -57,5 +58,10 @@ export async function submitVote(
   payload: VoteRequest,
 ): Promise<VoteResponse> {
   const { data } = await api.post<VoteResponse>(`/sessions/${roomCode}/votes`, payload);
+  return data;
+}
+
+export async function getSessionResults(roomCode: string): Promise<SessionResultsResponse> {
+  const { data } = await api.get<SessionResultsResponse>(`/sessions/${roomCode}/results`);
   return data;
 }

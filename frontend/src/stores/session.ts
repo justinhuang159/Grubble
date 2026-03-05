@@ -1,18 +1,27 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import axios from "axios";
 
 import {
   createSession,
   getNextRestaurant,
+  getSessionResults,
   getSession,
   joinSession,
   startSession,
   submitVote,
 } from "../lib/api";
-import type { CreateSessionRequest, RestaurantCard, SessionResponse, VoteResponse } from "../types";
+import type {
+  CreateSessionRequest,
+  RestaurantCard,
+  SessionResponse,
+  SessionResultsResponse,
+  VoteResponse,
+} from "../types";
 
 export const useSessionStore = defineStore("session", () => {
+  const STORAGE_KEY = "grubble.session.v1";
+
   const session = ref<SessionResponse | null>(null);
   const currentUser = ref<string>("");
   const loading = ref(false);
@@ -20,6 +29,28 @@ export const useSessionStore = defineStore("session", () => {
   const error = ref<string>("");
   const currentRestaurant = ref<RestaurantCard | null>(null);
   const latestVoteResult = ref<VoteResponse | null>(null);
+  const results = ref<SessionResultsResponse | null>(null);
+  const resultsLoading = ref(false);
+  const showResults = ref(false);
+
+  function hydrateFromStorage(): void {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        session?: SessionResponse | null;
+        currentUser?: string;
+        showResults?: boolean;
+      };
+      session.value = parsed.session ?? null;
+      currentUser.value = parsed.currentUser ?? "";
+      showResults.value = Boolean(parsed.showResults);
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
 
   const isHost = computed(() => {
     if (!session.value || !currentUser.value) {
@@ -85,6 +116,8 @@ export const useSessionStore = defineStore("session", () => {
     currentUser.value = trimmedName;
     currentRestaurant.value = null;
     latestVoteResult.value = null;
+    results.value = null;
+    showResults.value = false;
   }
 
   async function refresh(): Promise<void> {
@@ -105,6 +138,8 @@ export const useSessionStore = defineStore("session", () => {
     session.value = data;
     currentRestaurant.value = null;
     latestVoteResult.value = null;
+    results.value = null;
+    showResults.value = false;
   }
 
   function setSession(data: SessionResponse): void {
@@ -147,6 +182,66 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
+  async function loadResults(): Promise<void> {
+    if (!session.value) {
+      return;
+    }
+    resultsLoading.value = true;
+    error.value = "";
+    try {
+      const data = await getSessionResults(session.value.room_code);
+      results.value = data;
+    } catch (err) {
+      setErrorFromUnknown(err);
+      throw err;
+    } finally {
+      resultsLoading.value = false;
+    }
+  }
+
+  async function openResults(): Promise<void> {
+    await loadResults();
+    showResults.value = true;
+  }
+
+  function closeResults(): void {
+    showResults.value = false;
+  }
+
+  function resetState(): void {
+    session.value = null;
+    currentUser.value = "";
+    loading.value = false;
+    voteLoading.value = false;
+    error.value = "";
+    currentRestaurant.value = null;
+    latestVoteResult.value = null;
+    results.value = null;
+    resultsLoading.value = false;
+    showResults.value = false;
+  }
+
+  hydrateFromStorage();
+
+  watch(
+    [session, currentUser, showResults],
+    () => {
+      if (!session.value || !currentUser.value) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          session: session.value,
+          currentUser: currentUser.value,
+          showResults: showResults.value,
+        }),
+      );
+    },
+    { deep: true },
+  );
+
   return {
     session,
     currentUser,
@@ -155,6 +250,9 @@ export const useSessionStore = defineStore("session", () => {
     error,
     currentRestaurant,
     latestVoteResult,
+    results,
+    resultsLoading,
+    showResults,
     isHost,
     create,
     join,
@@ -163,5 +261,9 @@ export const useSessionStore = defineStore("session", () => {
     setSession,
     loadNextRestaurant,
     vote,
+    loadResults,
+    openResults,
+    closeResults,
+    resetState,
   };
 });

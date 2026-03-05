@@ -33,6 +33,16 @@ onMounted(async () => {
       {{ matchMessage }}
     </p>
 
+    <div class="mt-4">
+      <button
+        class="rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-300 disabled:opacity-60"
+        :disabled="store.resultsLoading"
+        @click="store.openResults"
+      >
+        {{ store.resultsLoading ? "Loading..." : "View Results" }}
+      </button>
+    </div>
+
     <div v-if="store.currentRestaurant" class="mt-4 rounded-lg border border-slate-200 p-5">
       <p class="text-lg font-semibold text-slate-900">{{ store.currentRestaurant.name }}</p>
       <p v-if="store.currentRestaurant.address" class="mt-1 text-sm text-slate-600">

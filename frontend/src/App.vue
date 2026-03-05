@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 
 import CreateSessionView from "./views/CreateSessionView.vue";
 import JoinSessionView from "./views/JoinSessionView.vue";
+import ResultsSessionView from "./views/ResultsSessionView.vue";
 import SwipeSessionView from "./views/SwipeSessionView.vue";
 import WaitingRoomView from "./views/WaitingRoomView.vue";
 import { useSessionStore } from "./stores/session";
@@ -24,7 +25,8 @@ const inActiveSession = computed(() => store.session?.status === "active");
         {{ store.error }}
       </p>
 
-      <SwipeSessionView v-if="inActiveSession" class="mt-6" />
+      <ResultsSessionView v-if="inActiveSession && store.showResults" class="mt-6" />
+      <SwipeSessionView v-else-if="inActiveSession" class="mt-6" />
       <WaitingRoomView v-else-if="inSession" class="mt-6" />
 
       <section v-else class="mt-6 space-y-4">

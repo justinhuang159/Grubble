@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
 from . import config  # noqa: F401
@@ -20,6 +20,8 @@ from .schemas import (
     NextRestaurantResponse,
     RestaurantCard,
     SessionResponse,
+    SessionResultItem,
+    SessionResultsResponse,
     StartSessionRequest,
     VoteRequest,
     VoteResponse,
@@ -130,6 +132,16 @@ def get_mock_businesses(term: str, location_text: str) -> list[dict]:
             "rating": 4.1,
             "review_count": 95,
         },
+        {
+            "id": "mock-3",
+            "name": f"{term.title()} Alley",
+            "image_url": None,
+            "location": {"display_address": [f"789 Franklin St", location_text]},
+            "coordinates": {"latitude": 37.7949, "longitude": -122.4294},
+            "price": "$$$",
+            "rating": 4.7,
+            "review_count": 60,
+        }
     ]
 
 
@@ -458,6 +470,51 @@ def get_session(room_code: str, db: Session = Depends(get_db)):
 def list_sessions(db: Session = Depends(get_db)):
     sessions = db.scalars(select(SessionModel)).all()
     return [build_response(session) for session in sessions]
+
+
+@app.get("/sessions/{room_code}/results", response_model=SessionResultsResponse)
+def get_session_results(room_code: str, db: Session = Depends(get_db)):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    total_participants = (
+        db.scalar(select(func.count(Participant.id)).where(Participant.session_id == session.id)) or 0
+    )
+
+    yes_votes = func.coalesce(
+        func.sum(
+            case(
+                (Vote.decision == "yes", 1),
+                else_=0,
+            )
+        ),
+        0,
+    ).label("yes_votes")
+    total_votes = func.count(Vote.id).label("total_votes")
+
+    ranking = db.execute(
+        select(Restaurant, yes_votes, total_votes)
+        .outerjoin(
+            Vote,
+            (Vote.restaurant_id == Restaurant.id) & (Vote.session_id == session.id),
+        )
+        .where(Restaurant.session_id == session.id)
+        .group_by(Restaurant.id)
+        .order_by(yes_votes.desc(), total_votes.desc(), Restaurant.id.asc())
+    ).all()
+
+    return SessionResultsResponse(
+        total_participants=total_participants,
+        results=[
+            SessionResultItem(
+                restaurant=build_restaurant_card(restaurant),
+                yes_votes=int(yes_votes_count or 0),
+                total_votes=int(total_votes_count or 0),
+            )
+            for restaurant, yes_votes_count, total_votes_count in ranking
+        ],
+    )
 
 
 @app.websocket("/ws/sessions/{room_code}")

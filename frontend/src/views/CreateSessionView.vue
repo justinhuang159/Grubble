@@ -12,7 +12,7 @@ const hostName = ref("");
 const locationText = ref("");
 const cuisine = ref("");
 const price = ref("");
-const radiusMiles = ref(2);
+const radiusMiles = ref();
 
 async function submit() {
   if (!hostName.value.trim() || !locationText.value.trim()) {
