@@ -311,6 +311,8 @@ async def start_session(room_code: str, req: StartSessionRequest, db: Session = 
         raise HTTPException(status_code=404, detail="Session not found")
     if req.host_name != session.host_name:
         raise HTTPException(status_code=403, detail="Only the host can start this session")
+    if not session.location_text:
+        raise HTTPException(status_code=400, detail="location_text is required to start a session")
     if session.status != "waiting":
         raise HTTPException(status_code=409, detail="Session can only be started from waiting state")
 

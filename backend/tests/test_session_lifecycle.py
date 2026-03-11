@@ -73,6 +73,29 @@ def test_start_session_fails_when_rapidapi_config_missing(monkeypatch: pytest.Mo
     assert "RAPIDAPI_KEY" in start_res.json()["detail"]
 
 
+def test_start_session_fails_when_location_missing(monkeypatch: pytest.MonkeyPatch, client) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setenv("RAPIDAPI_HOST", "example-host")
+    monkeypatch.delenv("USE_MOCK_YELP", raising=False)
+
+    create_res = client.post(
+        "/sessions",
+        json={
+            "host_name": "Justin",
+            "cuisine": "sushi",
+            "price": "1,2",
+            "radius_meters": 3000,
+            "location_text": None,
+        },
+    )
+    assert create_res.status_code == 200
+    room_code = create_res.json()["room_code"]
+
+    start_res = client.post(f"/sessions/{room_code}/start", json={"host_name": "Justin"})
+    assert start_res.status_code == 400
+    assert "location_text is required" in start_res.json()["detail"]
+
+
 def test_start_session_fails_when_no_restaurants_found(monkeypatch: pytest.MonkeyPatch, client) -> None:
     monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
     monkeypatch.setenv("RAPIDAPI_HOST", "example-host")

@@ -101,6 +101,10 @@ onUnmounted(() => {
       </ul>
     </div>
 
+    <p v-if="store.error" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+      {{ store.error }}
+    </p>
+
     <div class="mt-4 flex items-center justify-between gap-4">
       <p class="text-sm text-slate-600">Share room code so others can join.</p>
       <button

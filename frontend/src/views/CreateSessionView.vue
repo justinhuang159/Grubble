@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import { useSessionStore } from "../stores/session";
 
@@ -13,8 +13,24 @@ const locationText = ref("");
 const cuisine = ref("");
 const price = ref("");
 const radiusMiles = ref();
+const submitted = ref(false);
+
+const hostNameError = computed(() => {
+  if (!submitted.value) {
+    return "";
+  }
+  return hostName.value.trim() ? "" : "Host name is required.";
+});
+
+const locationError = computed(() => {
+  if (!submitted.value) {
+    return "";
+  }
+  return locationText.value.trim() ? "" : "Location is required.";
+});
 
 async function submit() {
+  submitted.value = true;
   if (!hostName.value.trim() || !locationText.value.trim()) {
     return;
   }
@@ -36,14 +52,22 @@ async function submit() {
     <form class="mt-4 space-y-4" @submit.prevent="submit">
       <input
         v-model="hostName"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+        :class="[
+          'w-full rounded-md border px-3 py-2 outline-none focus:border-slate-500',
+          hostNameError ? 'border-red-400 focus:border-red-500' : 'border-slate-300',
+        ]"
         placeholder="Host name"
       />
+      <p v-if="hostNameError" class="text-xs text-red-600">{{ hostNameError }}</p>
       <input
         v-model="locationText"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+        :class="[
+          'w-full rounded-md border px-3 py-2 outline-none focus:border-slate-500',
+          locationError ? 'border-red-400 focus:border-red-500' : 'border-slate-300',
+        ]"
         placeholder="Location (e.g. San Francisco, CA)"
       />
+      <p v-if="locationError" class="text-xs text-red-600">{{ locationError }}</p>
       <input
         v-model="cuisine"
         class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
