@@ -1,8 +1,192 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+@layer base {
+  :root {
+    color-scheme: light;
+    --page-bg: #f6f0e8;
+    --page-ink: #1c1917;
+    --muted-ink: #6b5f57;
+    --card-bg: rgba(255, 251, 247, 0.82);
+    --card-border: rgba(120, 53, 15, 0.12);
+    --accent: #c2410c;
+    --accent-deep: #7c2d12;
+    --accent-soft: #fb923c;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background:
+      radial-gradient(circle at top left, rgba(251, 191, 36, 0.28), transparent 32%),
+      radial-gradient(circle at top right, rgba(251, 146, 60, 0.16), transparent 26%),
+      linear-gradient(180deg, #fffaf5 0%, var(--page-bg) 48%, #efe4d6 100%);
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--page-ink);
+    font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 10% 20%, rgba(249, 115, 22, 0.09), transparent 20%),
+      radial-gradient(circle at 90% 10%, rgba(217, 119, 6, 0.08), transparent 22%);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: "Fraunces", Georgia, serif;
+    letter-spacing: -0.03em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply relative mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12;
+  }
+
+  .hero-panel {
+    @apply relative overflow-hidden rounded-[2rem] border px-6 py-8 shadow-[0_28px_80px_rgba(120,53,15,0.10)] sm:px-8 sm:py-10;
+    background: linear-gradient(135deg, rgba(255, 251, 247, 0.95), rgba(255, 245, 235, 0.86));
+    border-color: var(--card-border);
+    backdrop-filter: blur(14px);
+  }
+
+  .hero-panel::before {
+    content: "";
+    position: absolute;
+    inset: auto -8% -35% auto;
+    width: 18rem;
+    height: 18rem;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(251, 146, 60, 0.28), transparent 64%);
+    pointer-events: none;
+  }
+
+  .hero-kicker {
+    @apply text-xs font-semibold uppercase tracking-[0.28em];
+    color: var(--accent-deep);
+  }
+
+  .hero-title {
+    @apply mt-3 text-5xl leading-none sm:text-6xl;
+  }
+
+  .hero-subtitle {
+    @apply mt-4 max-w-2xl text-sm leading-6 sm:text-base;
+    color: var(--muted-ink);
+  }
+
+  .glass-card {
+    @apply rounded-[1.75rem] border p-6 shadow-[0_24px_60px_rgba(28,25,23,0.08)] backdrop-blur-sm sm:p-7;
+    background: var(--card-bg);
+    border-color: var(--card-border);
+  }
+
+  .section-title {
+    @apply text-2xl leading-tight;
+  }
+
+  .section-copy {
+    @apply mt-2 text-sm leading-6;
+    color: var(--muted-ink);
+  }
+
+  .field-label {
+    @apply mb-2 block text-xs font-semibold uppercase tracking-[0.22em];
+    color: var(--accent-deep);
+  }
+
+  .app-input {
+    @apply w-full rounded-2xl border px-4 py-3 outline-none transition duration-200;
+    border-color: rgba(120, 53, 15, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+
+  .app-input:focus {
+    border-color: rgba(194, 65, 12, 0.8);
+    box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.14);
+  }
+
+  .app-input::placeholder {
+    color: rgba(87, 83, 78, 0.72);
+  }
+
+  .app-button {
+    @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white transition duration-200 disabled:cursor-not-allowed disabled:opacity-60;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-soft) 100%);
+    box-shadow: 0 16px 30px rgba(194, 65, 12, 0.24);
+  }
+
+  .app-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 20px 36px rgba(194, 65, 12, 0.28);
+  }
+
+  .app-button-secondary {
+    @apply inline-flex items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold transition duration-200;
+    background: rgba(255, 255, 255, 0.76);
+    color: #7c2d12;
+    border: 1px solid rgba(120, 53, 15, 0.16);
+  }
+
+  .app-button-secondary:hover {
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  .segmented-shell {
+    @apply inline-flex rounded-full border p-1.5;
+    border-color: rgba(120, 53, 15, 0.14);
+    background: rgba(255, 251, 247, 0.78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+
+  .segmented-button {
+    @apply rounded-full px-5 py-2.5 text-sm font-semibold transition duration-150;
+    color: #7c2d12;
+  }
+
+  .segmented-button-active {
+    @apply shadow;
+    background: linear-gradient(135deg, #fff8ef, #ffffff);
+    color: #431407;
+  }
+
+  .status-pill {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em];
+    background: rgba(255, 237, 213, 0.9);
+    color: #9a3412;
+  }
+
+  .restaurant-image {
+    @apply h-56 w-full rounded-[1.5rem] object-cover;
+    background:
+      linear-gradient(135deg, rgba(251, 146, 60, 0.3), rgba(124, 45, 18, 0.22)),
+      linear-gradient(135deg, #fcd9b6, #f5c88d);
+  }
+
+  .metric-chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+    background: rgba(255, 237, 213, 0.92);
+    color: #9a3412;
+  }
+
+  .soft-alert {
+    @apply rounded-2xl px-4 py-3 text-sm;
+  }
 }

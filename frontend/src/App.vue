@@ -16,12 +16,15 @@ const inActiveSession = computed(() => store.session?.status === "active");
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-50 px-4 py-10">
-    <div class="mx-auto max-w-xl">
-      <h1 class="text-3xl font-bold tracking-tight text-slate-900">Grubble</h1>
-      <p class="mt-1 text-sm text-slate-600">Restaurant group decision app</p>
+  <main class="app-shell min-h-screen">
+    <div class="hero-panel">
+      <p class="hero-kicker">Group Dinner, Simplified</p>
+      <h1 class="hero-title text-stone-900">Grubble</h1>
+      <p class="hero-subtitle">
+        Gather the group, narrow the neighborhood, and let the best spot rise to the top without the usual back-and-forth.
+      </p>
 
-      <p v-if="store.error" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+      <p v-if="store.error" class="soft-alert mt-6 bg-red-50 text-red-700">
         {{ store.error }}
       </p>
 
@@ -29,18 +32,18 @@ const inActiveSession = computed(() => store.session?.status === "active");
       <SwipeSessionView v-else-if="inActiveSession" class="mt-6" />
       <WaitingRoomView v-else-if="inSession" class="mt-6" />
 
-      <section v-else class="mt-6 space-y-4">
-        <div class="inline-flex rounded-md bg-slate-200 p-1">
+      <section v-else class="mt-8 space-y-5">
+        <div class="segmented-shell">
           <button
-            class="rounded px-4 py-2 text-sm font-medium"
-            :class="mode === 'create' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'"
+            class="segmented-button"
+            :class="mode === 'create' ? 'segmented-button-active' : ''"
             @click="mode = 'create'"
           >
             Create
           </button>
           <button
-            class="rounded px-4 py-2 text-sm font-medium"
-            :class="mode === 'join' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'"
+            class="segmented-button"
+            :class="mode === 'join' ? 'segmented-button-active' : ''"
             @click="mode = 'join'"
           >
             Join

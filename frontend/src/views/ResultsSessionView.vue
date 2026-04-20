@@ -15,21 +15,21 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="rounded-xl bg-white p-6 shadow">
+  <section class="glass-card">
     <div class="flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-xl font-semibold text-slate-900">Session Results</h2>
-        <p class="mt-1 text-sm text-slate-600">Ranked by yes votes (highest to lowest)</p>
+        <h2 class="section-title text-stone-900">Session Results</h2>
+        <p class="section-copy">Ranked by yes votes, with the strongest picks surfaced first.</p>
       </div>
       <div class="flex items-center gap-2">
         <button
-          class="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-300"
+          class="app-button-secondary"
           @click="store.closeResults"
         >
           Back to Swipe
         </button>
         <button
-          class="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          class="app-button"
           @click="store.resetState"
         >
           Start New Session
@@ -37,37 +37,53 @@ onMounted(async () => {
       </div>
     </div>
 
-    <p v-if="store.resultsLoading" class="mt-4 text-sm text-slate-600">Loading results...</p>
+    <p v-if="store.resultsLoading" class="section-copy mt-4">Loading results...</p>
 
     <div v-else-if="rankedResults.length > 0" class="mt-4 space-y-3">
       <article
         v-for="(item, idx) in rankedResults"
         :key="item.restaurant.id"
-        class="rounded-lg border border-slate-200 p-4"
+        class="overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/72 p-4 shadow-[0_18px_34px_rgba(28,25,23,0.06)]"
       >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">#{{ idx + 1 }}</p>
-            <p class="text-lg font-semibold text-slate-900">{{ item.restaurant.name }}</p>
-            <p v-if="item.restaurant.address" class="mt-1 text-sm text-slate-600">
-              {{ item.restaurant.address }}
-            </p>
-            <p class="mt-2 text-sm text-slate-600">
-              <span v-if="item.restaurant.price">{{ item.restaurant.price }} </span>
-              <span v-if="item.restaurant.rating">• {{ item.restaurant.rating }} stars</span>
-            </p>
+        <div class="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
+          <img
+            v-if="item.restaurant.image_url"
+            :src="item.restaurant.image_url"
+            :alt="item.restaurant.name"
+            class="restaurant-image h-40"
+          />
+          <div v-else class="restaurant-image flex h-40 items-end p-4 text-white">
+            <p class="text-lg font-semibold">{{ item.restaurant.name }}</p>
           </div>
-          <div class="rounded-md bg-emerald-50 px-3 py-2 text-right">
-            <p class="text-xs text-emerald-700">Yes votes</p>
-            <p class="text-lg font-semibold text-emerald-800">{{ item.yes_votes }}</p>
-            <p class="text-xs text-emerald-700">of {{ store.results?.total_participants ?? 0 }} people</p>
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">#{{ idx + 1 }}</p>
+              <p class="mt-2 text-2xl font-semibold text-stone-900">{{ item.restaurant.name }}</p>
+              <p v-if="item.restaurant.address" class="mt-2 text-sm leading-6 text-stone-600">
+              {{ item.restaurant.address }}
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span v-if="item.restaurant.price" class="metric-chip">{{ item.restaurant.price }}</span>
+                <span v-if="item.restaurant.rating" class="metric-chip">{{ item.restaurant.rating }} stars</span>
+                <span v-if="item.restaurant.review_count" class="metric-chip">
+                  {{ item.restaurant.review_count }} reviews
+                </span>
+              </div>
+            </div>
+            <div class="rounded-2xl bg-emerald-50 px-4 py-3 text-right">
+              <p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Yes votes</p>
+              <p class="mt-1 text-2xl font-semibold text-emerald-800">{{ item.yes_votes }}</p>
+              <p class="text-xs text-emerald-700">of {{ store.results?.total_participants ?? 0 }} people</p>
+            </div>
           </div>
         </div>
-        <p class="mt-2 text-xs text-slate-500">Total submitted votes: {{ item.total_votes }}</p>
+        <p class="mt-4 text-xs font-medium uppercase tracking-[0.2em] text-stone-500">
+          Total submitted votes: {{ item.total_votes }}
+        </p>
       </article>
     </div>
 
-    <p v-else class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+    <p v-else class="soft-alert mt-4 bg-stone-100 text-stone-700">
       No results yet. Votes will appear after participants start swiping.
     </p>
   </section>

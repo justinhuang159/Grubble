@@ -30,47 +30,74 @@ async function submit() {
 </script>
 
 <template>
-  <section class="rounded-xl bg-white p-6 shadow">
-    <h2 class="text-xl font-semibold text-slate-900">Create Session</h2>
-    <p class="mt-1 text-sm text-slate-600">Create a room and become host.</p>
+  <section class="glass-card">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="section-title text-stone-900">Create a Table</h2>
+        <p class="section-copy">Set the mood, location, and filters. We’ll turn that into a room everyone can jump into fast.</p>
+      </div>
+      <span class="status-pill">Host Flow</span>
+    </div>
     <form class="mt-4 space-y-4" @submit.prevent="submit">
-      <input
-        v-model="hostName"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-        placeholder="Host name"
-      />
-      <input
-        v-model="locationText"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-        placeholder="Location (e.g. San Francisco, CA)"
-      />
-      <input
-        v-model="cuisine"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-        placeholder="Cuisine (optional, e.g. sushi)"
-      />
-      <select
-        v-model="price"
-        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500"
-      >
-        <option value="">Price (optional)</option>
-        <option value="1">$</option>
-        <option value="1,2">$$ and under</option>
-        <option value="2,3">$$$ and under</option>
-        <option value="3,4">$$$$ only</option>
-      </select>
-      <input
-        v-model.number="radiusMiles"
-        class="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-        min="0"
-        max="25"
-        step="0.5"
-        type="number"
-        placeholder="Radius miles (optional)"
-      />
+      <div>
+        <label class="field-label" for="host-name">Host Name</label>
+        <input
+          id="host-name"
+          v-model="hostName"
+          class="app-input"
+          placeholder="Who is leading tonight?"
+        />
+      </div>
+      <div>
+        <label class="field-label" for="location-text">Location</label>
+        <input
+          id="location-text"
+          v-model="locationText"
+          class="app-input"
+          placeholder="Neighborhood, city, or full address"
+        />
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="field-label" for="cuisine">Cuisine</label>
+          <input
+            id="cuisine"
+            v-model="cuisine"
+            class="app-input"
+            placeholder="Sushi, burgers, tapas..."
+          />
+        </div>
+        <div>
+          <label class="field-label" for="price">Budget</label>
+          <select
+            id="price"
+            v-model="price"
+            class="app-input bg-white/80"
+          >
+            <option value="">Any budget</option>
+            <option value="1">$</option>
+            <option value="1,2">$$ and under</option>
+            <option value="2,3">$$$ and under</option>
+            <option value="3,4">$$$$ only</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="field-label" for="radius-miles">Search Radius</label>
+        <input
+          id="radius-miles"
+          v-model.number="radiusMiles"
+          class="app-input"
+          min="0"
+          max="25"
+          step="0.5"
+          type="number"
+          placeholder="Miles from the chosen location"
+        />
+      </div>
       <button
         :disabled="store.loading"
-        class="w-full rounded-md bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-60"
+        class="app-button w-full"
         type="submit"
       >
         {{ store.loading ? "Creating..." : "Create Session" }}
