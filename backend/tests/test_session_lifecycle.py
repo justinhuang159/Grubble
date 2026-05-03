@@ -19,6 +19,19 @@ def create_default_session(client) -> str:
     return create_res.json()["room_code"]
 
 
+def test_cors_preflight_allows_localhost_dev_ports(client) -> None:
+    response = client.options(
+        "/sessions",
+        headers={
+            "Origin": "http://localhost:5174",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
+
+
 def test_create_and_start_session_caches_restaurants(monkeypatch: pytest.MonkeyPatch, client, db_sessionmaker) -> None:
     monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
     monkeypatch.setenv("RAPIDAPI_HOST", "example-host")
@@ -60,6 +73,135 @@ def test_create_and_start_session_caches_restaurants(monkeypatch: pytest.MonkeyP
     db.close()
     assert len(restaurants) == 1
     assert restaurants[0].name == "Sushi Place"
+
+
+def test_start_session_uses_photo_url_when_image_url_missing(
+    monkeypatch: pytest.MonkeyPatch, client, db_sessionmaker
+) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setenv("RAPIDAPI_HOST", "example-host")
+    monkeypatch.delenv("USE_MOCK_YELP", raising=False)
+
+    from app import main as main_module
+
+    monkeypatch.setattr(main_module, "search_pexels_fallback_images", lambda *args, **kwargs: [])
+
+    def fake_search(
+        self, *, term: str, location: str, price: str | None, radius_meters: int | None, limit: int = 30
+    ):
+        return [
+            {
+                "id": "abc123",
+                "name": "Photo URL Place",
+                "photo_url": "https://img.example/from-photo-url.jpg",
+                "location": {"display_address": ["1 Main St", "San Francisco, CA"]},
+                "coordinates": {"latitude": 37.78, "longitude": -122.41},
+            }
+        ]
+
+    monkeypatch.setattr(main_module.YelpClient, "search_businesses", fake_search)
+
+    room_code = create_default_session(client)
+    start_res = client.post(f"/sessions/{room_code}/start", json={"host_name": "Justin"})
+    assert start_res.status_code == 200
+
+    db = db_sessionmaker()
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    assert session is not None
+    restaurant = db.scalar(select(Restaurant).where(Restaurant.session_id == session.id))
+    db.close()
+
+    assert restaurant is not None
+    assert restaurant.image_url == "https://img.example/from-photo-url.jpg"
+
+
+def test_start_session_prefers_full_size_photo_over_preview_url(
+    monkeypatch: pytest.MonkeyPatch, client, db_sessionmaker
+) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setenv("RAPIDAPI_HOST", "example-host")
+    monkeypatch.delenv("USE_MOCK_YELP", raising=False)
+
+    from app import main as main_module
+
+    monkeypatch.setattr(main_module, "search_pexels_fallback_images", lambda *args, **kwargs: [])
+
+    def fake_search(
+        self, *, term: str, location: str, price: str | None, radius_meters: int | None, limit: int = 30
+    ):
+        return [
+            {
+                "id": "abc123",
+                "name": "Hi Res Place",
+                "photo_url": "https://img.example/preview.jpg",
+                "photos": [
+                    {
+                        "url_prefix": "https://img.example/fullsize/",
+                        "url_suffix": ".jpg",
+                    }
+                ],
+                "location": {"display_address": ["1 Main St", "San Francisco, CA"]},
+                "coordinates": {"latitude": 37.78, "longitude": -122.41},
+            }
+        ]
+
+    monkeypatch.setattr(main_module.YelpClient, "search_businesses", fake_search)
+
+    room_code = create_default_session(client)
+    start_res = client.post(f"/sessions/{room_code}/start", json={"host_name": "Justin"})
+    assert start_res.status_code == 200
+
+    db = db_sessionmaker()
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    assert session is not None
+    restaurant = db.scalar(select(Restaurant).where(Restaurant.session_id == session.id))
+    db.close()
+
+    assert restaurant is not None
+    assert restaurant.image_url == "https://img.example/fullsize/o.jpg"
+
+
+def test_start_session_uses_pexels_fallback_when_provider_has_no_image(
+    monkeypatch: pytest.MonkeyPatch, client, db_sessionmaker
+) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setenv("RAPIDAPI_HOST", "example-host")
+    monkeypatch.delenv("USE_MOCK_YELP", raising=False)
+
+    from app import main as main_module
+
+    monkeypatch.setattr(
+        main_module,
+        "search_pexels_fallback_images",
+        lambda query, limit: ["https://images.pexels.com/fallback-one.jpg"][:limit],
+    )
+
+    def fake_search(
+        self, *, term: str, location: str, price: str | None, radius_meters: int | None, limit: int = 30
+    ):
+        return [
+            {
+                "id": "abc123",
+                "name": "No Image Place",
+                "location": {"display_address": ["1 Main St", "San Francisco, CA"]},
+                "coordinates": {"latitude": 37.78, "longitude": -122.41},
+            }
+        ]
+
+    monkeypatch.setattr(main_module.YelpClient, "search_businesses", fake_search)
+
+    room_code = create_default_session(client)
+    start_res = client.post(f"/sessions/{room_code}/start", json={"host_name": "Justin"})
+    assert start_res.status_code == 200
+
+    db = db_sessionmaker()
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    assert session is not None
+    restaurant = db.scalar(select(Restaurant).where(Restaurant.session_id == session.id))
+    db.close()
+
+    assert restaurant is not None
+    assert restaurant.image_url == "https://images.pexels.com/fallback-one.jpg"
 
 
 def test_start_session_fails_when_rapidapi_config_missing(monkeypatch: pytest.MonkeyPatch, client) -> None:

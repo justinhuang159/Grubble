@@ -5,6 +5,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import case, delete, func, select
@@ -29,10 +30,18 @@ from .schemas import (
 
 app = FastAPI()
 
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
+
+def get_allowed_frontend_origins() -> list[str]:
+    raw_origins = os.getenv("FRONTEND_ORIGINS") or os.getenv("FRONTEND_ORIGIN", "")
+    configured_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    defaults = ["http://127.0.0.1:5173", "http://localhost:5173"]
+    return list(dict.fromkeys([*configured_origins, *defaults]))
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_origin, "http://localhost:5173"],
+    allow_origins=get_allowed_frontend_origins(),
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,6 +170,87 @@ def get_yelp_client_from_env() -> YelpClient:
     return YelpClient(api_key=api_key, api_host=api_host, base_url=base_url)
 
 
+def build_yelp_photo_url(photo: dict | None) -> str | None:
+    if not isinstance(photo, dict):
+        return None
+
+    direct_url = photo.get("url") or photo.get("photo_url")
+    if isinstance(direct_url, str) and direct_url.strip():
+        return direct_url.strip()
+
+    url_prefix = photo.get("url_prefix")
+    url_suffix = photo.get("url_suffix")
+    if isinstance(url_prefix, str) and isinstance(url_suffix, str) and url_prefix.strip() and url_suffix.strip():
+        return f"{url_prefix.strip()}o{url_suffix.strip()}"
+
+    return None
+
+
+def extract_business_image_url(item: dict) -> str | None:
+    primary_photo = item.get("primary_photo")
+    if isinstance(primary_photo, str) and primary_photo.strip():
+        return primary_photo.strip()
+
+    primary_photo_url = build_yelp_photo_url(primary_photo if isinstance(primary_photo, dict) else None)
+    if primary_photo_url:
+        return primary_photo_url
+
+    for key in ("photos", "menu_photos"):
+        photos = item.get(key)
+        if isinstance(photos, list):
+            for photo in photos:
+                photo_url = build_yelp_photo_url(photo if isinstance(photo, dict) else None)
+                if photo_url:
+                    return photo_url
+
+    direct_fields = [
+        item.get("image_url"),
+        item.get("photo_url"),
+    ]
+    for value in direct_fields:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return None
+
+
+def search_pexels_fallback_images(query: str, limit: int) -> list[str]:
+    api_key = os.getenv("PEXELS_API_KEY")
+    if not api_key or limit <= 0:
+        return []
+
+    url = os.getenv("PEXELS_API_BASE_URL", "https://api.pexels.com/v1").rstrip("/") + "/search"
+    params = {"query": query, "per_page": min(limit, 20), "orientation": "landscape"}
+    headers = {"Authorization": api_key}
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url, headers=headers, params=params)
+        if response.status_code >= 400:
+            return []
+    except httpx.HTTPError:
+        return []
+
+    payload = response.json()
+    photos = payload.get("photos")
+    if not isinstance(photos, list):
+        return []
+
+    urls: list[str] = []
+    for photo in photos:
+        if not isinstance(photo, dict):
+            continue
+        src = photo.get("src")
+        if not isinstance(src, dict):
+            continue
+        candidate = src.get("landscape") or src.get("large") or src.get("medium") or src.get("original")
+        if isinstance(candidate, str) and candidate.strip():
+            urls.append(candidate.strip())
+        if len(urls) >= limit:
+            break
+    return urls
+
+
 def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
     if not session.location_text:
         raise HTTPException(status_code=400, detail="location_text is required to start a session")
@@ -210,6 +300,10 @@ def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
     if not businesses:
         raise HTTPException(status_code=404, detail="No restaurants found for this session")
 
+    fallback_query = f"{term} restaurant food"
+    missing_image_count = sum(1 for item in businesses if extract_business_image_url(item) is None)
+    fallback_image_urls = search_pexels_fallback_images(fallback_query, missing_image_count)
+
     db.execute(delete(Restaurant).where(Restaurant.session_id == session.id))
     for idx, item in enumerate(businesses):
         location = item.get("location") or {}
@@ -221,12 +315,15 @@ def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
             address = location.get("address1")
 
         external_id = str(item.get("id") or item.get("alias") or f"generated-{idx}")
+        image_url = extract_business_image_url(item)
+        if image_url is None and fallback_image_urls:
+            image_url = fallback_image_urls.pop(0)
         db.add(
             Restaurant(
                 session_id=session.id,
                 external_id=external_id,
                 name=str(item.get("name") or "Unknown Restaurant"),
-                image_url=item.get("image_url"),
+                image_url=image_url,
                 address=address,
                 lat=coordinates.get("latitude"),
                 lng=coordinates.get("longitude"),
