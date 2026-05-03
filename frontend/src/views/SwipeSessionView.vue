@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 
+import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
 
 const store = useSessionStore();
@@ -62,7 +63,9 @@ onMounted(async () => {
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <span v-if="store.currentRestaurant.price" class="metric-chip">{{ store.currentRestaurant.price }}</span>
+          <span v-if="store.currentRestaurant.price" class="metric-chip">
+            {{ formatRestaurantPrice(store.currentRestaurant.price) }}
+          </span>
           <span v-if="store.currentRestaurant.rating" class="metric-chip">{{ store.currentRestaurant.rating }} stars</span>
           <span v-if="store.currentRestaurant.review_count" class="metric-chip">
             {{ store.currentRestaurant.review_count }} reviews

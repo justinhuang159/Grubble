@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 
+import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
 
 const store = useSessionStore();
@@ -63,7 +64,9 @@ onMounted(async () => {
               {{ item.restaurant.address }}
               </p>
               <div class="mt-3 flex flex-wrap gap-2">
-                <span v-if="item.restaurant.price" class="metric-chip">{{ item.restaurant.price }}</span>
+                <span v-if="item.restaurant.price" class="metric-chip">
+                  {{ formatRestaurantPrice(item.restaurant.price) }}
+                </span>
                 <span v-if="item.restaurant.rating" class="metric-chip">{{ item.restaurant.rating }} stars</span>
                 <span v-if="item.restaurant.review_count" class="metric-chip">
                   {{ item.restaurant.review_count }} reviews
