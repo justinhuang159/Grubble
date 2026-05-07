@@ -32,6 +32,7 @@ export const useSessionStore = defineStore("session", () => {
   const results = ref<SessionResultsResponse | null>(null);
   const resultsLoading = ref(false);
   const showResults = ref(false);
+  const voteProgress = ref<{ yes_votes: number; total_votes: number; total_participants: number } | null>(null);
 
   function hydrateFromStorage(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -174,11 +175,27 @@ export const useSessionStore = defineStore("session", () => {
       });
       latestVoteResult.value = data;
       currentRestaurant.value = data.next_restaurant;
+      voteProgress.value = null;
     } catch (err) {
       setErrorFromUnknown(err);
       throw err;
     } finally {
       voteLoading.value = false;
+    }
+  }
+
+  function updateVoteProgress(data: {
+    restaurant_id: number;
+    yes_votes_for_restaurant: number;
+    votes_submitted_for_restaurant: number;
+    total_participants: number;
+  }): void {
+    if (currentRestaurant.value?.id === data.restaurant_id) {
+      voteProgress.value = {
+        yes_votes: data.yes_votes_for_restaurant,
+        total_votes: data.votes_submitted_for_restaurant,
+        total_participants: data.total_participants,
+      };
     }
   }
 
@@ -253,6 +270,7 @@ export const useSessionStore = defineStore("session", () => {
     results,
     resultsLoading,
     showResults,
+    voteProgress,
     isHost,
     create,
     join,
@@ -261,6 +279,7 @@ export const useSessionStore = defineStore("session", () => {
     setSession,
     loadNextRestaurant,
     vote,
+    updateVoteProgress,
     loadResults,
     openResults,
     closeResults,

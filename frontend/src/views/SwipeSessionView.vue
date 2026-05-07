@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
 
 const store = useSessionStore();
+let socket: WebSocket | null = null;
 
 const matchMessage = computed(() => {
   const result = store.latestVoteResult;
@@ -14,10 +15,54 @@ const matchMessage = computed(() => {
   return `Match found on restaurant #${result.matched_restaurant_id}`;
 });
 
+const progressPercent = computed(() => {
+  const p = store.voteProgress;
+  if (!p || p.total_participants === 0) return 0;
+  return Math.round((p.total_votes / p.total_participants) * 100);
+});
+
+function buildWsUrl(roomCode: string): string {
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+  const wsBase = apiBase.replace(/^http/, "ws");
+  return `${wsBase}/ws/sessions/${roomCode}`;
+}
+
+function connectSocket(roomCode: string) {
+  socket = new WebSocket(buildWsUrl(roomCode));
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as { event?: string; restaurant_id?: number; yes_votes_for_restaurant?: number; votes_submitted_for_restaurant?: number; total_participants?: number };
+      if (
+        message.event === "vote_progress" &&
+        message.restaurant_id != null &&
+        message.yes_votes_for_restaurant != null &&
+        message.votes_submitted_for_restaurant != null &&
+        message.total_participants != null
+      ) {
+        store.updateVoteProgress({
+          restaurant_id: message.restaurant_id,
+          yes_votes_for_restaurant: message.yes_votes_for_restaurant,
+          votes_submitted_for_restaurant: message.votes_submitted_for_restaurant,
+          total_participants: message.total_participants,
+        });
+      }
+    } catch {
+      // ignore malformed messages
+    }
+  };
+}
+
 onMounted(async () => {
   if (!store.currentRestaurant) {
     await store.loadNextRestaurant();
   }
+  if (store.session) {
+    connectSocket(store.session.room_code);
+  }
+});
+
+onUnmounted(() => {
+  socket?.close();
 });
 </script>
 
@@ -70,6 +115,19 @@ onMounted(async () => {
           <span v-if="store.currentRestaurant.review_count" class="metric-chip">
             {{ store.currentRestaurant.review_count }} reviews
           </span>
+        </div>
+      </div>
+
+      <div v-if="store.voteProgress" class="mt-4 rounded-2xl bg-stone-50/80 px-3 py-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-medium text-stone-500">{{ store.voteProgress.total_votes }}/{{ store.voteProgress.total_participants }} voted</span>
+          <span class="text-xs font-semibold text-emerald-700">{{ store.voteProgress.yes_votes }} yes</span>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-stone-200">
+          <div
+            class="h-1.5 rounded-full bg-orange-500 transition-all duration-300"
+            :style="{ width: progressPercent + '%' }"
+          />
         </div>
       </div>
 
