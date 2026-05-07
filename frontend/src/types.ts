@@ -29,6 +29,9 @@ export interface RestaurantCard {
 
 export interface NextRestaurantResponse {
   restaurant: RestaurantCard | null;
+  total_participants: number;
+  yes_votes: number;
+  total_votes: number;
 }
 
 export interface VoteRequest {
@@ -45,6 +48,8 @@ export interface VoteResponse {
   votes_submitted_for_restaurant: number;
   yes_votes_for_restaurant: number;
   next_restaurant: RestaurantCard | null;
+  next_yes_votes: number;
+  next_total_votes: number;
 }
 
 export interface SessionResultItem {

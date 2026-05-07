@@ -155,6 +155,9 @@ export const useSessionStore = defineStore("session", () => {
     try {
       const data = await getNextRestaurant(session.value.room_code, currentUser.value);
       currentRestaurant.value = data.restaurant;
+      voteProgress.value = data.restaurant
+        ? { yes_votes: data.yes_votes, total_votes: data.total_votes, total_participants: data.total_participants }
+        : null;
     } catch (err) {
       setErrorFromUnknown(err);
       throw err;
@@ -175,7 +178,9 @@ export const useSessionStore = defineStore("session", () => {
       });
       latestVoteResult.value = data;
       currentRestaurant.value = data.next_restaurant;
-      voteProgress.value = null;
+      voteProgress.value = data.next_restaurant
+        ? { yes_votes: data.next_yes_votes, total_votes: data.next_total_votes, total_participants: data.total_participants }
+        : null;
     } catch (err) {
       setErrorFromUnknown(err);
       throw err;

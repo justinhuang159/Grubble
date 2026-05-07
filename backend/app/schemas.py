@@ -46,6 +46,9 @@ class RestaurantCard(BaseModel):
 
 class NextRestaurantResponse(BaseModel):
     restaurant: RestaurantCard | None
+    total_participants: int = 0
+    yes_votes: int = 0
+    total_votes: int = 0
 
 
 class VoteRequest(BaseModel):
@@ -62,6 +65,8 @@ class VoteResponse(BaseModel):
     votes_submitted_for_restaurant: int
     yes_votes_for_restaurant: int
     next_restaurant: RestaurantCard | None
+    next_yes_votes: int = 0
+    next_total_votes: int = 0
 
 
 class SessionResultItem(BaseModel):

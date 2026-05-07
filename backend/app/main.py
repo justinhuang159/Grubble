@@ -449,7 +449,30 @@ def get_next_restaurant(room_code: str, user_name: str, db: Session = Depends(ge
     next_restaurant = get_next_restaurant_for_user(db, session.id, user_name)
     if not next_restaurant:
         return NextRestaurantResponse(restaurant=None)
-    return NextRestaurantResponse(restaurant=build_restaurant_card(next_restaurant))
+
+    total_participants = db.scalar(
+        select(func.count(Participant.id)).where(Participant.session_id == session.id)
+    ) or 0
+    yes_votes = db.scalar(
+        select(func.count(Vote.id)).where(
+            Vote.session_id == session.id,
+            Vote.restaurant_id == next_restaurant.id,
+            Vote.decision == "yes",
+        )
+    ) or 0
+    total_votes = db.scalar(
+        select(func.count(Vote.id)).where(
+            Vote.session_id == session.id,
+            Vote.restaurant_id == next_restaurant.id,
+        )
+    ) or 0
+
+    return NextRestaurantResponse(
+        restaurant=build_restaurant_card(next_restaurant),
+        total_participants=total_participants,
+        yes_votes=yes_votes,
+        total_votes=total_votes,
+    )
 
 
 @app.post("/sessions/{room_code}/votes", response_model=VoteResponse)
@@ -522,6 +545,24 @@ async def submit_vote(room_code: str, req: VoteRequest, db: Session = Depends(ge
     matched_restaurant_id = req.restaurant_id if matched else None
 
     next_restaurant = get_next_restaurant_for_user(db, session.id, req.user_name)
+
+    next_yes_votes = 0
+    next_total_votes = 0
+    if next_restaurant:
+        next_yes_votes = db.scalar(
+            select(func.count(Vote.id)).where(
+                Vote.session_id == session.id,
+                Vote.restaurant_id == next_restaurant.id,
+                Vote.decision == "yes",
+            )
+        ) or 0
+        next_total_votes = db.scalar(
+            select(func.count(Vote.id)).where(
+                Vote.session_id == session.id,
+                Vote.restaurant_id == next_restaurant.id,
+            )
+        ) or 0
+
     db.commit()
 
     await ws_manager.broadcast(
@@ -552,6 +593,8 @@ async def submit_vote(room_code: str, req: VoteRequest, db: Session = Depends(ge
         votes_submitted_for_restaurant=votes_submitted_for_restaurant,
         yes_votes_for_restaurant=yes_votes_for_restaurant,
         next_restaurant=build_restaurant_card(next_restaurant) if next_restaurant else None,
+        next_yes_votes=next_yes_votes,
+        next_total_votes=next_total_votes,
     )
 
 
