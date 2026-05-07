@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
@@ -8,10 +8,61 @@ const store = useSessionStore();
 
 const rankedResults = computed(() => store.results?.results ?? []);
 
+let socket: WebSocket | null = null;
+
+function buildWsUrl(roomCode: string): string {
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+  const wsBase = apiBase.replace(/^http/, "ws");
+  return `${wsBase}/ws/sessions/${roomCode}`;
+}
+
+function connectSocket(roomCode: string) {
+  socket = new WebSocket(buildWsUrl(roomCode));
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as {
+        event?: string;
+        restaurant_id?: number;
+        yes_votes_for_restaurant?: number;
+        votes_submitted_for_restaurant?: number;
+      };
+      if (
+        message.event === "vote_progress" &&
+        message.restaurant_id != null &&
+        message.yes_votes_for_restaurant != null &&
+        message.votes_submitted_for_restaurant != null &&
+        store.results
+      ) {
+        const item = store.results.results.find(
+          (r) => r.restaurant.id === message.restaurant_id,
+        );
+        if (item) {
+          item.yes_votes = message.yes_votes_for_restaurant!;
+          item.total_votes = message.votes_submitted_for_restaurant!;
+          store.results.results.sort((a, b) => {
+            if (b.yes_votes !== a.yes_votes) return b.yes_votes - a.yes_votes;
+            if (b.total_votes !== a.total_votes) return b.total_votes - a.total_votes;
+            return a.restaurant.id - b.restaurant.id;
+          });
+        }
+      }
+    } catch {
+      // ignore malformed messages
+    }
+  };
+}
+
 onMounted(async () => {
   if (!store.results) {
     await store.loadResults();
   }
+  if (store.session) {
+    connectSocket(store.session.room_code);
+  }
+});
+
+onUnmounted(() => {
+  socket?.close();
 });
 </script>
 
