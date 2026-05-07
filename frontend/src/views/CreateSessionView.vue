@@ -40,7 +40,7 @@ async function submit() {
     </div>
     <form class="mt-4 space-y-4" @submit.prevent="submit">
       <div>
-        <label class="field-label" for="host-name">Host Name</label>
+        <label class="field-label" for="host-name">Host Name <span class="text-orange-600">*</span></label>
         <input
           id="host-name"
           v-model="hostName"
@@ -49,7 +49,7 @@ async function submit() {
         />
       </div>
       <div>
-        <label class="field-label" for="location-text">Location</label>
+        <label class="field-label" for="location-text">Location <span class="text-orange-600">*</span></label>
         <input
           id="location-text"
           v-model="locationText"
@@ -59,7 +59,7 @@ async function submit() {
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
-          <label class="field-label" for="cuisine">Cuisine</label>
+          <label class="field-label" for="cuisine">Cuisine <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
           <input
             id="cuisine"
             v-model="cuisine"
@@ -68,7 +68,7 @@ async function submit() {
           />
         </div>
         <div>
-          <label class="field-label" for="price">Budget</label>
+          <label class="field-label" for="price">Budget <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
           <select
             id="price"
             v-model="price"
@@ -83,7 +83,7 @@ async function submit() {
         </div>
       </div>
       <div>
-        <label class="field-label" for="radius-miles">Search Radius</label>
+        <label class="field-label" for="radius-miles">Search Radius <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
         <input
           id="radius-miles"
           v-model.number="radiusMiles"
@@ -95,6 +95,7 @@ async function submit() {
           placeholder="Miles from the chosen location"
         />
       </div>
+      <p class="text-xs text-stone-400"><span class="text-orange-600">*</span> Required</p>
       <button
         :disabled="store.loading"
         class="app-button w-full"
