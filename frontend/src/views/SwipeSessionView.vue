@@ -77,9 +77,7 @@ watch(() => store.latestVoteResult, (result) => {
 });
 
 onMounted(async () => {
-  if (!store.currentRestaurant) {
-    await store.loadNextRestaurant();
-  }
+  await store.loadNextRestaurant();
   if (store.session) {
     connectSocket(store.session.room_code);
   }
