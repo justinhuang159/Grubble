@@ -581,6 +581,8 @@ async def submit_vote(room_code: str, req: VoteRequest, db: Session = Depends(ge
             {
                 "event": "match_found",
                 "restaurant_id": req.restaurant_id,
+                "restaurant_name": restaurant.name,
+                "restaurant_image_url": restaurant.image_url,
                 "total_participants": total_participants,
             },
         )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
@@ -7,13 +7,20 @@ import { useSessionStore } from "../stores/session";
 const store = useSessionStore();
 let socket: WebSocket | null = null;
 
-const matchMessage = computed(() => {
-  const result = store.latestVoteResult;
-  if (!result || !result.matched || !result.matched_restaurant_id) {
-    return "";
-  }
-  return `Match found on restaurant #${result.matched_restaurant_id}`;
-});
+const celebrating = ref(false);
+const celebrationName = ref("");
+const celebrationImage = ref<string | null>(null);
+let celebrationTimer: ReturnType<typeof setTimeout> | null = null;
+
+function triggerCelebration(name: string, imageUrl: string | null) {
+  if (celebrating.value) return;
+  celebrationName.value = name;
+  celebrationImage.value = imageUrl;
+  celebrating.value = true;
+  celebrationTimer = setTimeout(() => {
+    store.openResults();
+  }, 3000);
+}
 
 const progressPercent = computed(() => {
   const p = store.voteProgress;
@@ -31,8 +38,18 @@ function connectSocket(roomCode: string) {
   socket = new WebSocket(buildWsUrl(roomCode));
   socket.onmessage = (event) => {
     try {
-      const message = JSON.parse(event.data) as { event?: string; restaurant_id?: number; yes_votes_for_restaurant?: number; votes_submitted_for_restaurant?: number; total_participants?: number };
-      if (
+      const message = JSON.parse(event.data) as {
+        event?: string;
+        restaurant_id?: number;
+        restaurant_name?: string;
+        restaurant_image_url?: string;
+        yes_votes_for_restaurant?: number;
+        votes_submitted_for_restaurant?: number;
+        total_participants?: number;
+      };
+      if (message.event === "match_found") {
+        triggerCelebration(message.restaurant_name ?? "your restaurant", message.restaurant_image_url ?? null);
+      } else if (
         message.event === "vote_progress" &&
         message.restaurant_id != null &&
         message.yes_votes_for_restaurant != null &&
@@ -52,6 +69,13 @@ function connectSocket(roomCode: string) {
   };
 }
 
+// Fallback for the voter if WebSocket delivery is delayed
+watch(() => store.latestVoteResult, (result) => {
+  if (result?.matched && result.matched_restaurant_id && !celebrating.value) {
+    triggerCelebration(store.currentRestaurant?.name ?? "your restaurant", store.currentRestaurant?.image_url ?? null);
+  }
+});
+
 onMounted(async () => {
   if (!store.currentRestaurant) {
     await store.loadNextRestaurant();
@@ -63,10 +87,44 @@ onMounted(async () => {
 
 onUnmounted(() => {
   socket?.close();
+  if (celebrationTimer) clearTimeout(celebrationTimer);
 });
 </script>
 
 <template>
+  <Transition name="celebrate">
+    <div
+      v-if="celebrating"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+    >
+      <div class="w-full max-w-sm overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+        <div class="relative h-48 bg-stone-100">
+          <img
+            v-if="celebrationImage"
+            :src="celebrationImage"
+            alt=""
+            class="h-full w-full object-cover"
+          />
+          <div v-else class="flex h-full items-center justify-center text-7xl">🍽️</div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <p class="absolute bottom-3 left-4 right-4 truncate text-lg font-semibold text-white">
+            {{ celebrationName }}
+          </p>
+        </div>
+        <div class="px-6 pb-6 pt-5 text-center">
+          <p class="text-xs font-semibold uppercase tracking-widest text-orange-700">unanimous match</p>
+          <h2 class="mt-1 font-serif text-3xl text-stone-900">It's a match!</h2>
+          <p class="mt-2 text-sm text-stone-500">Everyone said yes. Taking you to results…</p>
+          <div class="mt-4 flex justify-center gap-1.5">
+            <span class="h-1.5 w-6 animate-pulse rounded-full bg-orange-500" style="animation-delay: 0ms" />
+            <span class="h-1.5 w-6 animate-pulse rounded-full bg-orange-400" style="animation-delay: 200ms" />
+            <span class="h-1.5 w-6 animate-pulse rounded-full bg-orange-300" style="animation-delay: 400ms" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <section class="glass-card">
     <div class="flex items-center justify-between">
       <h2 class="section-title text-stone-900">Swipe Deck</h2>
@@ -74,10 +132,6 @@ onUnmounted(() => {
         Room: {{ store.session?.room_code }}
       </span>
     </div>
-
-    <p v-if="matchMessage" class="soft-alert mt-4 bg-emerald-50 text-emerald-700">
-      {{ matchMessage }}
-    </p>
 
     <div class="mt-4">
       <button
@@ -154,3 +208,13 @@ onUnmounted(() => {
     </p>
   </section>
 </template>
+
+<style scoped>
+.celebrate-enter-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.celebrate-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+</style>
