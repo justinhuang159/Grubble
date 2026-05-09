@@ -17,8 +17,10 @@ from .integrations.yelp_client import MissingRapidAPIConfigError, YelpClient, Ye
 from .models import Participant, Restaurant, Session as SessionModel, Vote, YelpQueryCache
 from .schemas import (
     CreateSessionRequest,
+    HoursItem,
     JoinSessionRequest,
     NextRestaurantResponse,
+    PhotoItem,
     RestaurantCard,
     SessionResponse,
     SessionResultItem,
@@ -336,7 +338,43 @@ def cache_restaurants_for_session(db: Session, session: SessionModel) -> int:
     return len(businesses)
 
 
+def _fmt_time(t: str) -> str:
+    h, m = int(t[:2]), int(t[2:])
+    period = "AM" if h < 12 else "PM"
+    h = h % 12 or 12
+    return f"{h}:{m:02d} {period}"
+
+
 def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
+    payload = restaurant.source_payload or {}
+
+    raw_cats = payload.get("categories") or []
+    categories = [c.get("name") or c.get("title") for c in raw_cats if c.get("name") or c.get("title")]
+
+    raw_photos = payload.get("photos") or []
+    photos: list[PhotoItem] = []
+    for p in raw_photos[:6]:
+        prefix = p.get("url_prefix", "")
+        suffix = p.get("url_suffix", ".jpg")
+        if prefix:
+            photos.append(PhotoItem(url=f"{prefix}l{suffix}", caption=p.get("caption") or None))
+
+    hours: list[HoursItem] | None = None
+    raw_hours = payload.get("hours") or []
+    if raw_hours:
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        regular = next((h for h in raw_hours if h.get("hours_type") == "REGULAR"), raw_hours[0])
+        parsed = []
+        for slot in regular.get("open") or []:
+            start, end = slot.get("start", ""), slot.get("end", "")
+            if start and end:
+                parsed.append(HoursItem(
+                    day=day_names[slot.get("day", 0) % 7],
+                    hours=f"{_fmt_time(start)} – {_fmt_time(end)}",
+                ))
+        if parsed:
+            hours = parsed
+
     return RestaurantCard(
         id=restaurant.id,
         name=restaurant.name,
@@ -345,6 +383,9 @@ def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
         price=restaurant.price,
         rating=restaurant.rating,
         review_count=restaurant.review_count,
+        categories=categories,
+        photos=photos,
+        hours=hours,
     )
 
 

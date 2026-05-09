@@ -17,6 +17,16 @@ export interface StartSessionRequest {
   host_name: string;
 }
 
+export interface PhotoItem {
+  url: string;
+  caption: string | null;
+}
+
+export interface HoursItem {
+  day: string;
+  hours: string;
+}
+
 export interface RestaurantCard {
   id: number;
   name: string;
@@ -25,6 +35,9 @@ export interface RestaurantCard {
   price: string | null;
   rating: number | null;
   review_count: number | null;
+  categories: string[];
+  photos: PhotoItem[];
+  hours: HoursItem[] | null;
 }
 
 export interface NextRestaurantResponse {

@@ -34,6 +34,16 @@ class SessionResponse(BaseModel):
     participants: List[str]
 
 
+class PhotoItem(BaseModel):
+    url: str
+    caption: str | None = None
+
+
+class HoursItem(BaseModel):
+    day: str
+    hours: str
+
+
 class RestaurantCard(BaseModel):
     id: int
     name: str
@@ -42,6 +52,9 @@ class RestaurantCard(BaseModel):
     price: str | None
     rating: float | None
     review_count: int | None
+    categories: list[str] = []
+    photos: list[PhotoItem] = []
+    hours: list[HoursItem] | None = None
 
 
 class NextRestaurantResponse(BaseModel):
