@@ -55,6 +55,9 @@ class RestaurantCard(BaseModel):
     categories: list[str] = []
     photos: list[PhotoItem] = []
     hours: list[HoursItem] | None = None
+    yelp_url: str | None = None
+    phone: str | None = None
+    short_address: str | None = None
 
 
 class NextRestaurantResponse(BaseModel):

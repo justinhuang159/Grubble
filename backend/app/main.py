@@ -375,6 +375,16 @@ def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
         if parsed:
             hours = parsed
 
+    alias = payload.get("alias")
+    yelp_url = f"https://www.yelp.com/biz/{alias}" if alias else None
+
+    phone = payload.get("localized_phone") or payload.get("phone") or None
+
+    short_address = None
+    addresses = payload.get("addresses") or {}
+    primary = addresses.get("primary_language") or {}
+    short_address = primary.get("short_form") or None
+
     return RestaurantCard(
         id=restaurant.id,
         name=restaurant.name,
@@ -386,6 +396,9 @@ def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
         categories=categories,
         photos=photos,
         hours=hours,
+        yelp_url=yelp_url,
+        phone=phone,
+        short_address=short_address,
     )
 
 

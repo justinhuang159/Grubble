@@ -38,6 +38,9 @@ export interface RestaurantCard {
   categories: string[];
   photos: PhotoItem[];
   hours: HoursItem[] | null;
+  yelp_url: string | null;
+  phone: string | null;
+  short_address: string | null;
 }
 
 export interface NextRestaurantResponse {
