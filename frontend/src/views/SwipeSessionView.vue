@@ -177,7 +177,8 @@ onUnmounted(() => {
     </div>
   </Transition>
 
-  <!-- Photo lightbox -->
+  <!-- Photo lightbox — teleported to body to escape hero-panel's backdrop-filter containing block -->
+  <Teleport to="body">
   <Transition name="lightbox">
     <div
       v-if="lightboxOpen"
@@ -245,6 +246,7 @@ onUnmounted(() => {
       </div>
     </div>
   </Transition>
+  </Teleport>
 
   <section class="glass-card">
     <div class="flex items-center justify-between">

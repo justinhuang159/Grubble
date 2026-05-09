@@ -1,12 +1,79 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
+import type { RestaurantCard } from "../types";
 
 const store = useSessionStore();
 
 const rankedResults = computed(() => store.results?.results ?? []);
+
+const PAGE_SIZE = 10;
+const currentPage = ref(1);
+
+const totalPages = computed(() => Math.ceil(rankedResults.value.length / PAGE_SIZE));
+
+const pagedResults = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  return rankedResults.value.slice(start, start + PAGE_SIZE);
+});
+
+const pageNumbers = computed<(number | "…")[]>(() => {
+  const total = totalPages.value;
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const p = currentPage.value;
+  if (p <= 4) return [1, 2, 3, 4, 5, "…", total];
+  if (p >= total - 3) return [1, "…", total - 4, total - 3, total - 2, total - 1, total];
+  return [1, "…", p - 1, p, p + 1, "…", total];
+});
+
+// Per-card carousel state keyed by restaurant id
+const photoIndexes = ref<Record<number, number>>({});
+
+function getPhotoIndex(id: number): number {
+  return photoIndexes.value[id] ?? 0;
+}
+
+function setPhotoIndex(id: number, i: number) {
+  photoIndexes.value[id] = i;
+}
+
+function photosFor(r: RestaurantCard) {
+  if (r.photos.length > 0) return r.photos;
+  if (r.image_url) return [{ url: r.image_url, caption: null }];
+  return [];
+}
+
+// Lightbox
+const lightboxOpen = ref(false);
+const lightboxPhotos = ref<{ url: string; caption: string | null }[]>([]);
+const lightboxIndex = ref(0);
+
+function openLightbox(photos: { url: string; caption: string | null }[], index: number) {
+  lightboxPhotos.value = photos;
+  lightboxIndex.value = index;
+  lightboxOpen.value = true;
+}
+
+function closeLightbox() {
+  lightboxOpen.value = false;
+}
+
+function lightboxPrev() {
+  lightboxIndex.value = (lightboxIndex.value - 1 + lightboxPhotos.value.length) % lightboxPhotos.value.length;
+}
+
+function lightboxNext() {
+  lightboxIndex.value = (lightboxIndex.value + 1) % lightboxPhotos.value.length;
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (!lightboxOpen.value) return;
+  if (e.key === "Escape") closeLightbox();
+  else if (e.key === "ArrowLeft") lightboxPrev();
+  else if (e.key === "ArrowRight") lightboxNext();
+}
 
 let socket: WebSocket | null = null;
 
@@ -53,6 +120,7 @@ function connectSocket(roomCode: string) {
 }
 
 onMounted(async () => {
+  window.addEventListener("keydown", handleKeydown);
   if (!store.results) {
     await store.loadResults();
   }
@@ -62,11 +130,80 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener("keydown", handleKeydown);
   socket?.close();
 });
 </script>
 
 <template>
+  <!-- Photo lightbox — teleported to body to escape hero-panel's backdrop-filter containing block -->
+  <Teleport to="body">
+  <Transition name="lightbox">
+    <div
+      v-if="lightboxOpen"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md"
+      @click.self="closeLightbox"
+    >
+      <div class="relative mx-4 w-full max-w-3xl">
+        <div class="relative overflow-hidden rounded-2xl bg-black shadow-2xl">
+          <img
+            :src="lightboxPhotos[lightboxIndex].url.replace('/l.', '/o.')"
+            class="block max-h-[80vh] w-full object-contain"
+          />
+
+          <!-- X -->
+          <button
+            class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="closeLightbox"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <!-- Left arrow -->
+          <button
+            v-if="lightboxPhotos.length > 1"
+            class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="lightboxPrev"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <!-- Right arrow -->
+          <button
+            v-if="lightboxPhotos.length > 1"
+            class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="lightboxNext"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <!-- Progress segments -->
+          <div v-if="lightboxPhotos.length > 1" class="absolute inset-x-0 bottom-3 flex justify-center gap-1.5 px-6">
+            <button
+              v-for="(_, i) in lightboxPhotos"
+              :key="i"
+              class="h-1 flex-1 rounded-full transition-all duration-300"
+              :class="i === lightboxIndex ? 'bg-white' : 'bg-white/35'"
+              @click.stop="lightboxIndex = i"
+            />
+          </div>
+        </div>
+
+        <p
+          v-if="lightboxPhotos[lightboxIndex].caption"
+          class="mt-3 text-center text-sm italic text-white/70"
+        >{{ lightboxPhotos[lightboxIndex].caption }}</p>
+      </div>
+    </div>
+  </Transition>
+  </Teleport>
+
   <section class="glass-card">
     <div class="flex items-center justify-between gap-4">
       <div>
@@ -93,23 +230,67 @@ onUnmounted(() => {
 
     <div v-else-if="rankedResults.length > 0" class="mt-4 space-y-3">
       <article
-        v-for="(item, idx) in rankedResults"
+        v-for="(item, idx) in pagedResults"
         :key="item.restaurant.id"
         class="overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/72 p-4 shadow-[0_18px_34px_rgba(28,25,23,0.06)]"
       >
         <div class="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
-          <img
-            v-if="item.restaurant.image_url"
-            :src="item.restaurant.image_url"
-            :alt="item.restaurant.name"
-            class="restaurant-image h-40"
-          />
-          <div v-else class="restaurant-image flex h-40 items-end p-4 text-white">
-            <p class="text-lg font-semibold">{{ item.restaurant.name }}</p>
+
+          <!-- Carousel -->
+          <div class="relative h-40 overflow-hidden rounded-[1.5rem] bg-stone-100">
+            <img
+              v-if="photosFor(item.restaurant).length > 0"
+              :src="photosFor(item.restaurant)[getPhotoIndex(item.restaurant.id)].url"
+              :alt="item.restaurant.name"
+              class="h-full w-full cursor-pointer object-cover"
+              style="background: linear-gradient(135deg, rgba(251,146,60,0.3), rgba(124,45,18,0.22)), linear-gradient(135deg, #fcd9b6, #f5c88d);"
+              @click="openLightbox(photosFor(item.restaurant), getPhotoIndex(item.restaurant.id))"
+            />
+            <div v-else class="restaurant-image flex h-full items-end p-4 text-white">
+              <p class="text-base font-semibold">{{ item.restaurant.name }}</p>
+            </div>
+
+            <div
+              v-if="photosFor(item.restaurant)[getPhotoIndex(item.restaurant.id)]?.caption"
+              class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-3 pb-2 pt-6"
+            >
+              <p class="truncate text-xs italic text-white/90">
+                {{ photosFor(item.restaurant)[getPhotoIndex(item.restaurant.id)].caption }}
+              </p>
+            </div>
+
+            <template v-if="photosFor(item.restaurant).length > 1">
+              <button
+                class="absolute left-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition hover:bg-black/50"
+                @click.stop="setPhotoIndex(item.restaurant.id, (getPhotoIndex(item.restaurant.id) - 1 + photosFor(item.restaurant).length) % photosFor(item.restaurant).length)"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition hover:bg-black/50"
+                @click.stop="setPhotoIndex(item.restaurant.id, (getPhotoIndex(item.restaurant.id) + 1) % photosFor(item.restaurant).length)"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <div class="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
+                <button
+                  v-for="(_, i) in photosFor(item.restaurant)"
+                  :key="i"
+                  :class="i === getPhotoIndex(item.restaurant.id) ? 'w-3 bg-white' : 'w-1.5 bg-white/50'"
+                  class="h-1 rounded-full transition-all duration-200"
+                  @click.stop="setPhotoIndex(item.restaurant.id, i)"
+                />
+              </div>
+            </template>
           </div>
+
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">#{{ idx + 1 }}</p>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">#{{ (currentPage - 1) * PAGE_SIZE + idx + 1 }}</p>
               <p class="mt-2 text-2xl font-semibold text-stone-900">{{ item.restaurant.name }}</p>
               <div class="mt-2 space-y-1.5">
                 <p v-if="item.restaurant.short_address || item.restaurant.address" class="flex items-start gap-1.5 text-sm text-stone-600">
@@ -163,6 +344,40 @@ onUnmounted(() => {
           Total submitted votes: {{ item.total_votes }}
         </p>
       </article>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="mt-6 flex items-center justify-center gap-1">
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-stone-500 transition hover:bg-white disabled:opacity-30"
+          :disabled="currentPage === 1"
+          @click="currentPage--"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <template v-for="p in pageNumbers" :key="p">
+          <span v-if="p === '…'" class="w-7 text-center text-sm text-stone-400">…</span>
+          <button
+            v-else
+            class="h-9 w-9 rounded-full text-sm font-semibold transition"
+            :class="p === currentPage
+              ? 'bg-orange-600 text-white shadow'
+              : 'bg-white/80 text-stone-700 hover:bg-white'"
+            @click="currentPage = (p as number)"
+          >{{ p }}</button>
+        </template>
+
+        <button
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-stone-500 transition hover:bg-white disabled:opacity-30"
+          :disabled="currentPage === totalPages"
+          @click="currentPage++"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <p v-else class="soft-alert mt-4 bg-stone-100 text-stone-700">
@@ -170,3 +385,14 @@ onUnmounted(() => {
     </p>
   </section>
 </template>
+
+<style scoped>
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 0.2s ease;
+}
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
+}
+</style>
