@@ -12,6 +12,8 @@ const showHours = ref(false);
 
 const lightboxOpen = ref(false);
 const lightboxIndex = ref(0);
+const lightboxDirection = ref<'next' | 'prev'>('next');
+const carouselDirection = ref<'next' | 'prev'>('next');
 
 function openLightbox(index: number) {
   lightboxIndex.value = index;
@@ -23,11 +25,33 @@ function closeLightbox() {
 }
 
 function lightboxPrev() {
+  lightboxDirection.value = 'prev';
   lightboxIndex.value = (lightboxIndex.value - 1 + currentPhotos.value.length) % currentPhotos.value.length;
 }
 
 function lightboxNext() {
+  lightboxDirection.value = 'next';
   lightboxIndex.value = (lightboxIndex.value + 1) % currentPhotos.value.length;
+}
+
+function lightboxGoTo(i: number) {
+  lightboxDirection.value = i > lightboxIndex.value ? 'next' : 'prev';
+  lightboxIndex.value = i;
+}
+
+function carouselPrev() {
+  carouselDirection.value = 'prev';
+  photoIndex.value = (photoIndex.value - 1 + currentPhotos.value.length) % currentPhotos.value.length;
+}
+
+function carouselNext() {
+  carouselDirection.value = 'next';
+  photoIndex.value = (photoIndex.value + 1) % currentPhotos.value.length;
+}
+
+function carouselGoTo(i: number) {
+  carouselDirection.value = i > photoIndex.value ? 'next' : 'prev';
+  photoIndex.value = i;
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -35,6 +59,32 @@ function handleKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") closeLightbox();
   else if (e.key === "ArrowLeft") lightboxPrev();
   else if (e.key === "ArrowRight") lightboxNext();
+}
+
+let lightboxTouchStartX = 0;
+
+function lightboxTouchStart(e: TouchEvent) {
+  lightboxTouchStartX = e.touches[0].clientX;
+}
+
+function lightboxTouchEnd(e: TouchEvent) {
+  const delta = e.changedTouches[0].clientX - lightboxTouchStartX;
+  if (Math.abs(delta) < 50) return;
+  if (delta < 0) lightboxNext();
+  else lightboxPrev();
+}
+
+let carouselTouchStartX = 0;
+
+function carouselTouchStart(e: TouchEvent) {
+  carouselTouchStartX = e.touches[0].clientX;
+}
+
+function carouselTouchEnd(e: TouchEvent) {
+  const delta = e.changedTouches[0].clientX - carouselTouchStartX;
+  if (Math.abs(delta) < 50) return;
+  if (delta < 0) carouselNext();
+  else carouselPrev();
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -187,12 +237,21 @@ onUnmounted(() => {
     >
       <div class="relative mx-4 w-full max-w-3xl">
         <!-- Image with all controls overlaid on top -->
-        <div class="relative overflow-hidden rounded-2xl bg-black shadow-2xl">
-          <img
-            :src="currentPhotos[lightboxIndex].url.replace('/l.', '/o.')"
-            :alt="store.currentRestaurant?.name"
-            class="block max-h-[80vh] w-full object-contain"
-          />
+        <div
+          class="relative overflow-hidden rounded-2xl bg-black shadow-2xl"
+          @touchstart.passive="lightboxTouchStart"
+          @touchend="lightboxTouchEnd"
+        >
+          <div class="grid overflow-hidden">
+            <Transition :name="lightboxDirection === 'next' ? 'lb-slide-left' : 'lb-slide-right'">
+              <img
+                :key="lightboxIndex"
+                :src="currentPhotos[lightboxIndex].url.replace('/l.', '/o.')"
+                :alt="store.currentRestaurant?.name"
+                class="block max-h-[80vh] w-full object-contain"
+              />
+            </Transition>
+          </div>
 
           <!-- X button — top right of image -->
           <button
@@ -233,7 +292,7 @@ onUnmounted(() => {
               :key="i"
               class="h-1 flex-1 rounded-full transition-all duration-300"
               :class="i === lightboxIndex ? 'bg-white' : 'bg-white/35'"
-              @click.stop="lightboxIndex = i"
+              @click.stop="lightboxGoTo(i)"
             />
           </div>
         </div>
@@ -269,53 +328,60 @@ onUnmounted(() => {
     <div v-if="store.currentRestaurant" class="mt-6 overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/70 p-4 shadow-[0_20px_40px_rgba(28,25,23,0.08)]">
 
       <!-- Photo carousel -->
-      <div class="relative h-56 overflow-hidden rounded-[1.5rem] bg-stone-100">
-        <img
-          v-if="currentPhotos.length > 0"
-          :src="currentPhotos[photoIndex].url"
-          :alt="store.currentRestaurant.name"
-          class="h-full w-full cursor-pointer object-cover"
-          style="background: linear-gradient(135deg, rgba(251,146,60,0.3), rgba(124,45,18,0.22)), linear-gradient(135deg, #fcd9b6, #f5c88d);"
-          @click="openLightbox(photoIndex)"
-        />
-        <div v-else class="restaurant-image flex h-full items-end p-5 text-white">
+      <div
+        class="relative h-56 overflow-hidden rounded-[1.5rem] bg-stone-100"
+        @touchstart.passive="carouselTouchStart"
+        @touchend="carouselTouchEnd"
+      >
+        <Transition :name="carouselDirection === 'next' ? 'carousel-left' : 'carousel-right'">
+          <img
+            v-if="currentPhotos.length > 0"
+            :key="photoIndex"
+            :src="currentPhotos[photoIndex].url"
+            :alt="store.currentRestaurant.name"
+            class="h-full w-full cursor-pointer object-cover"
+            style="background: linear-gradient(135deg, rgba(251,146,60,0.3), rgba(124,45,18,0.22)), linear-gradient(135deg, #fcd9b6, #f5c88d);"
+            @click="openLightbox(photoIndex)"
+          />
+        </Transition>
+        <div v-if="currentPhotos.length === 0" class="restaurant-image flex h-full items-end p-5 text-white">
           <p class="text-xl font-semibold">{{ store.currentRestaurant.name }}</p>
         </div>
 
         <div
           v-if="currentPhotos[photoIndex]?.caption"
-          class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-4 pb-3 pt-8"
+          class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/65 to-transparent px-4 pb-3 pt-8"
         >
           <p class="text-xs italic text-white/90">{{ currentPhotos[photoIndex].caption }}</p>
         </div>
 
         <template v-if="currentPhotos.length > 1">
           <button
-            class="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-lg text-white backdrop-blur-sm transition hover:bg-black/50"
-            @click.stop="photoIndex = (photoIndex - 1 + currentPhotos.length) % currentPhotos.length"
+            class="absolute left-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-lg text-white backdrop-blur-sm transition hover:bg-black/50"
+            @click.stop="carouselPrev"
           >‹</button>
           <button
-            class="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-lg text-white backdrop-blur-sm transition hover:bg-black/50"
-            @click.stop="photoIndex = (photoIndex + 1) % currentPhotos.length"
+            class="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-lg text-white backdrop-blur-sm transition hover:bg-black/50"
+            @click.stop="carouselNext"
           >›</button>
-          <div class="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1">
+          <div class="absolute bottom-2.5 left-1/2 z-10 flex -translate-x-1/2 gap-1">
             <button
               v-for="(_, i) in currentPhotos"
               :key="i"
               :class="i === photoIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50'"
               class="h-1.5 rounded-full transition-all duration-200"
-              @click.stop="photoIndex = i"
+              @click.stop="carouselGoTo(i)"
             />
           </div>
         </template>
       </div>
 
-      <div class="mt-5 flex flex-wrap items-start justify-between gap-4">
-        <div class="min-w-0 flex-1">
+      <div class="mt-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div class="min-w-0 sm:flex-1">
           <p class="text-2xl font-semibold text-stone-900">{{ store.currentRestaurant.name }}</p>
 
           <!-- Address / phone / Yelp -->
-          <div class="mt-2 space-y-1.5">
+          <div class="mt-2 space-y-2">
             <p v-if="store.currentRestaurant.short_address || store.currentRestaurant.address" class="flex items-start gap-1.5 text-sm text-stone-600">
               <svg class="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -384,7 +450,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="flex flex-wrap justify-end gap-2">
+        <div class="flex flex-wrap gap-2 sm:justify-end">
           <span
             v-for="cat in store.currentRestaurant.categories.slice(0, 3)"
             :key="cat"
@@ -464,4 +530,34 @@ onUnmounted(() => {
 .lightbox-leave-to {
   opacity: 0;
 }
+
+/* Carousel slide — absolute so both images overlap inside the fixed-height container */
+.carousel-left-enter-active,
+.carousel-left-leave-active,
+.carousel-right-enter-active,
+.carousel-right-leave-active {
+  transition: transform 0.3s ease;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.carousel-left-enter-from  { transform: translateX(100%); }
+.carousel-left-leave-to    { transform: translateX(-100%); }
+.carousel-right-enter-from { transform: translateX(-100%); }
+.carousel-right-leave-to   { transform: translateX(100%); }
+
+/* Lightbox slide — grid-area stacking so both images share the same cell */
+.lb-slide-left-enter-active,
+.lb-slide-left-leave-active,
+.lb-slide-right-enter-active,
+.lb-slide-right-leave-active {
+  transition: transform 0.3s ease;
+  grid-area: 1 / 1;
+}
+.lb-slide-left-enter-from  { transform: translateX(100%); }
+.lb-slide-left-leave-to    { transform: translateX(-100%); }
+.lb-slide-right-enter-from { transform: translateX(-100%); }
+.lb-slide-right-leave-to   { transform: translateX(100%); }
 </style>
