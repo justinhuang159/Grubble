@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
+import { getPopularDishes } from "../lib/api";
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
+import type { PopularDishItem } from "../types";
 
 const store = useSessionStore();
 let socket: WebSocket | null = null;
@@ -14,6 +16,10 @@ const lightboxOpen = ref(false);
 const lightboxIndex = ref(0);
 const lightboxDirection = ref<'next' | 'prev'>('next');
 const carouselDirection = ref<'next' | 'prev'>('next');
+
+const dishesOpen = ref(false);
+const dishesLoading = ref(false);
+const dishItems = ref<PopularDishItem[]>([]);
 
 function openLightbox(index: number) {
   lightboxIndex.value = index;
@@ -54,11 +60,28 @@ function carouselGoTo(i: number) {
   photoIndex.value = i;
 }
 
+async function openDishesModal() {
+  dishesOpen.value = true;
+  if (dishItems.value.length > 0) return;
+  dishesLoading.value = true;
+  try {
+    const result = await getPopularDishes(store.session!.room_code, store.currentRestaurant!.id);
+    dishItems.value = result.popular_dishes;
+  } catch {
+    // silent — empty state handles it
+  } finally {
+    dishesLoading.value = false;
+  }
+}
+
 function handleKeydown(e: KeyboardEvent) {
-  if (!lightboxOpen.value) return;
-  if (e.key === "Escape") closeLightbox();
-  else if (e.key === "ArrowLeft") lightboxPrev();
-  else if (e.key === "ArrowRight") lightboxNext();
+  if (lightboxOpen.value) {
+    if (e.key === "Escape") closeLightbox();
+    else if (e.key === "ArrowLeft") lightboxPrev();
+    else if (e.key === "ArrowRight") lightboxNext();
+  } else if (dishesOpen.value && e.key === "Escape") {
+    dishesOpen.value = false;
+  }
 }
 
 let lightboxTouchStartX = 0;
@@ -105,6 +128,8 @@ const todayHours = computed(() =>
 watch(() => store.currentRestaurant?.id, () => {
   photoIndex.value = 0;
   showHours.value = false;
+  dishesOpen.value = false;
+  dishItems.value = [];
   if (lightboxOpen.value) closeLightbox();
 });
 
@@ -307,6 +332,67 @@ onUnmounted(() => {
   </Transition>
   </Teleport>
 
+  <!-- Popular dishes modal -->
+  <Teleport to="body">
+  <Transition name="dishes-modal">
+    <div
+      v-if="dishesOpen"
+      class="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
+    >
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="dishesOpen = false" />
+      <div class="relative z-10 max-h-[85vh] w-full overflow-y-auto rounded-t-[2rem] bg-white shadow-2xl sm:max-w-md sm:rounded-[1.75rem]">
+        <div class="sticky top-0 border-b border-stone-100 bg-white/95 px-6 pb-4 pt-5 backdrop-blur-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-stone-800">Popular Dishes</h2>
+              <p class="mt-0.5 text-xs text-stone-400">{{ store.currentRestaurant?.name }}</p>
+            </div>
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100 text-stone-500 transition-colors hover:bg-stone-200"
+              @click="dishesOpen = false"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="px-6 pb-6 pt-4">
+          <div v-if="dishesLoading" class="flex justify-center py-10">
+            <div class="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+          </div>
+          <p v-else-if="dishItems.length === 0" class="py-8 text-center text-sm text-stone-400">
+            No popular dishes found for this restaurant.
+          </p>
+          <div v-else class="grid grid-cols-2 gap-3">
+            <div
+              v-for="dish in dishItems"
+              :key="dish.display_name"
+              class="overflow-hidden rounded-xl border border-stone-100 bg-stone-50"
+            >
+              <img
+                v-if="dish.photo_url"
+                :src="dish.photo_url"
+                :alt="dish.display_name"
+                class="aspect-square w-full object-cover"
+              />
+              <div v-else class="flex aspect-square items-center justify-center bg-stone-100">
+                <svg class="h-8 w-8 text-stone-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div class="p-2.5">
+                <p class="text-sm font-medium leading-tight text-stone-800">{{ dish.display_name }}</p>
+                <p class="mt-0.5 text-xs text-stone-400">{{ dish.review_count }} reviews</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+  </Teleport>
+
   <section class="glass-card">
     <div class="flex items-center justify-between">
       <h2 class="section-title text-stone-900">Swipe Deck</h2>
@@ -468,6 +554,17 @@ onUnmounted(() => {
             </span>
           </div>
 
+          <!-- Popular dishes button -->
+          <button
+            class="self-start inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
+            @click="openDishesModal"
+          >
+            <svg class="h-3.5 w-3.5 text-stone-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            Popular Dishes
+          </button>
+
           <!-- Vote progress -->
           <div v-if="store.voteProgress" class="rounded-2xl bg-stone-50/80 px-3 py-2.5">
             <div class="mb-1.5 flex items-center justify-between">
@@ -554,6 +651,15 @@ onUnmounted(() => {
 .carousel-left-leave-to    { transform: translateX(-100%); }
 .carousel-right-enter-from { transform: translateX(-100%); }
 .carousel-right-leave-to   { transform: translateX(100%); }
+
+.dishes-modal-enter-active,
+.dishes-modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.dishes-modal-enter-from,
+.dishes-modal-leave-to {
+  opacity: 0;
+}
 
 /* Lightbox slide — grid-area stacking so both images share the same cell */
 .lb-slide-left-enter-active,

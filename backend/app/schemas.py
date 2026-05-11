@@ -44,6 +44,13 @@ class HoursItem(BaseModel):
     hours: str
 
 
+class PopularDishItem(BaseModel):
+    display_name: str
+    review_count: int
+    photo_url: str | None = None
+    photo_count: int = 0
+
+
 class RestaurantCard(BaseModel):
     id: int
     name: str
@@ -58,6 +65,7 @@ class RestaurantCard(BaseModel):
     yelp_url: str | None = None
     phone: str | None = None
     short_address: str | None = None
+    popular_dishes: list[PopularDishItem] | None = None
 
 
 class NextRestaurantResponse(BaseModel):

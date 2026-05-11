@@ -13,3 +13,6 @@ dist/
 
 # Local docs
 Restaurant-Swipe-App-FDS-FastAPI-Vue.md
+
+# MCP config (contains API keys)
+.mcp.json

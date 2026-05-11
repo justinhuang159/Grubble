@@ -3,6 +3,7 @@ import type {
   CreateSessionRequest,
   JoinSessionRequest,
   NextRestaurantResponse,
+  PopularDishItem,
   SessionResultsResponse,
   SessionResponse,
   StartSessionRequest,
@@ -63,5 +64,15 @@ export async function submitVote(
 
 export async function getSessionResults(roomCode: string): Promise<SessionResultsResponse> {
   const { data } = await api.get<SessionResultsResponse>(`/sessions/${roomCode}/results`);
+  return data;
+}
+
+export async function getPopularDishes(
+  roomCode: string,
+  restaurantId: number,
+): Promise<{ popular_dishes: PopularDishItem[] }> {
+  const { data } = await api.get<{ popular_dishes: PopularDishItem[] }>(
+    `/sessions/${roomCode}/restaurants/${restaurantId}/popular_dishes`,
+  );
   return data;
 }

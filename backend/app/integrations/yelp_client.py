@@ -79,3 +79,19 @@ class YelpClient:
             raise YelpClientError("RapidAPI Yelp response missing list field")
 
         return businesses
+
+    def get_popular_dishes(self, business_id: str) -> list[dict]:
+        headers = {
+            "X-RapidAPI-Key": self.api_key,
+            "X-RapidAPI-Host": self.api_host,
+        }
+        url = f"{self.base_url}/popular_dish"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url, headers=headers, params={"business_id": business_id})
+            if response.status_code >= 400:
+                return []
+        except httpx.HTTPError:
+            return []
+        payload = response.json()
+        return payload.get("data", {}).get("popular_dishes", [])

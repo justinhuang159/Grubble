@@ -27,6 +27,13 @@ export interface HoursItem {
   hours: string;
 }
 
+export interface PopularDishItem {
+  display_name: string;
+  review_count: number;
+  photo_url: string | null;
+  photo_count: number;
+}
+
 export interface RestaurantCard {
   id: number;
   name: string;
@@ -41,6 +48,7 @@ export interface RestaurantCard {
   yelp_url: string | null;
   phone: string | null;
   short_address: string | null;
+  popular_dishes?: PopularDishItem[] | null;
 }
 
 export interface NextRestaurantResponse {

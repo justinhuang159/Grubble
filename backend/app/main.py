@@ -21,6 +21,7 @@ from .schemas import (
     JoinSessionRequest,
     NextRestaurantResponse,
     PhotoItem,
+    PopularDishItem,
     RestaurantCard,
     SessionResponse,
     SessionResultItem,
@@ -385,6 +386,17 @@ def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
     primary = addresses.get("primary_language") or {}
     short_address = primary.get("short_form") or None
 
+    popular_dishes_raw = payload.get("popular_dishes") or []
+    popular_dishes = [
+        PopularDishItem(
+            display_name=d.get("display_name", ""),
+            review_count=d.get("review_count", 0),
+            photo_url=d.get("photo_url"),
+            photo_count=d.get("photo_count", 0),
+        )
+        for d in popular_dishes_raw
+    ] or None
+
     return RestaurantCard(
         id=restaurant.id,
         name=restaurant.name,
@@ -399,6 +411,7 @@ def build_restaurant_card(restaurant: Restaurant) -> RestaurantCard:
         yelp_url=yelp_url,
         phone=phone,
         short_address=short_address,
+        popular_dishes=popular_dishes,
     )
 
 
@@ -711,6 +724,41 @@ def get_session_results(room_code: str, db: Session = Depends(get_db)):
             for restaurant, yes_votes_count, total_votes_count in ranking
         ],
     )
+
+
+@app.get("/sessions/{room_code}/restaurants/{restaurant_id}/popular_dishes")
+def get_restaurant_popular_dishes(
+    room_code: str,
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.id == restaurant_id,
+            Restaurant.session_id == session.id,
+        )
+    )
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found.")
+
+    payload = restaurant.source_payload or {}
+    if "popular_dishes" in payload:
+        return {"popular_dishes": payload["popular_dishes"]}
+
+    try:
+        client = get_yelp_client_from_env()
+    except MissingRapidAPIConfigError:
+        raise HTTPException(status_code=500, detail="Yelp API not configured.")
+
+    dishes = client.get_popular_dishes(restaurant.external_id)
+    payload = dict(payload)
+    payload["popular_dishes"] = dishes
+    restaurant.source_payload = payload
+    db.commit()
+    return {"popular_dishes": dishes}
 
 
 @app.websocket("/ws/sessions/{room_code}")
