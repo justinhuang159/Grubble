@@ -578,7 +578,7 @@ onUnmounted(() => {
 
           <div
             v-if="currentPhotos[photoIndex]?.caption"
-            class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/65 to-transparent px-4 pb-3 pt-8"
+            class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/65 to-transparent px-4 pb-7 pt-8"
           >
             <p class="text-xs italic text-white/90">{{ currentPhotos[photoIndex].caption }}</p>
           </div>

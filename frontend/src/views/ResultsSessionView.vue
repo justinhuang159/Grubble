@@ -559,7 +559,7 @@ onUnmounted(() => {
 
             <div
               v-if="photosFor(item.restaurant)[getPhotoIndex(item.restaurant.id)]?.caption"
-              class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/65 to-transparent px-3 pb-2 pt-6"
+              class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/65 to-transparent px-3 pb-6 pt-6"
             >
               <p class="truncate text-xs italic text-white/90">
                 {{ photosFor(item.restaurant)[getPhotoIndex(item.restaurant.id)].caption }}
