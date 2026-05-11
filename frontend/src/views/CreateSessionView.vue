@@ -25,8 +25,8 @@ const store = useSessionStore();
 const hostName = ref("");
 const locationText = ref("");
 const cuisine = ref("");
-const price = ref("");
-const radiusMiles = ref();
+const selectedPriceTiers = ref<number[]>([]);
+const radiusMiles = ref(5);
 const submitted = ref(false);
 
 const locationSuggestions = ref<NominatimResult[]>([]);
@@ -155,7 +155,7 @@ async function submit() {
     host_name: hostName.value,
     location_text: locationText.value,
     cuisine: cuisine.value || undefined,
-    price: price.value || undefined,
+    price: selectedPriceTiers.value.length ? [...selectedPriceTiers.value].sort().join(",") : undefined,
     radius_miles: radiusMiles.value || undefined,
   });
   emit("created");
@@ -274,6 +274,26 @@ async function submit() {
         </Transition>
       </div>
 
+      <div>
+        <div class="flex items-baseline justify-between">
+          <label class="field-label" for="radius-miles">Search Radius <span class="text-orange-600">*</span></label>
+          <span class="text-xs font-medium text-stone-500">{{ radiusMiles }} mi</span>
+        </div>
+        <input
+          id="radius-miles"
+          v-model.number="radiusMiles"
+          class="mt-1.5 w-full accent-orange-500"
+          min="1"
+          max="25"
+          step="1"
+          type="range"
+        />
+        <div class="mt-1 flex justify-between text-[0.65rem] text-stone-400">
+          <span>1 mi</span>
+          <span>25 mi</span>
+        </div>
+      </div>
+
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
           <label class="field-label" for="cuisine">Cuisine <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
@@ -285,33 +305,24 @@ async function submit() {
           />
         </div>
         <div>
-          <label class="field-label" for="price">Budget <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
-          <select
-            id="price"
-            v-model="price"
-            class="app-input bg-white/80"
-          >
-            <option value="">Any budget</option>
-            <option value="1">$</option>
-            <option value="1,2">$$ and under</option>
-            <option value="2,3">$$$ and under</option>
-            <option value="3,4">$$$$ only</option>
-          </select>
+          <label class="field-label">Budget <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
+          <div class="mt-1.5 flex gap-2">
+            <button
+              v-for="(label, tier) in ['$', '$$', '$$$', '$$$$']"
+              :key="tier"
+              type="button"
+              class="flex-1 rounded-full border py-1.5 text-sm font-medium transition-colors"
+              :class="selectedPriceTiers.includes(tier + 1)
+                ? 'border-orange-400 bg-orange-50 text-orange-700'
+                : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700'"
+              @click="selectedPriceTiers.includes(tier + 1)
+                ? selectedPriceTiers.splice(selectedPriceTiers.indexOf(tier + 1), 1)
+                : selectedPriceTiers.push(tier + 1)"
+            >
+              {{ label }}
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div>
-        <label class="field-label" for="radius-miles">Search Radius <span class="ml-1 normal-case text-[0.65rem] font-medium tracking-normal text-stone-400">Optional</span></label>
-        <input
-          id="radius-miles"
-          v-model.number="radiusMiles"
-          class="app-input"
-          min="0"
-          max="25"
-          step="0.5"
-          type="number"
-          placeholder="Miles from the chosen location"
-        />
       </div>
 
       <p class="text-xs text-stone-400"><span class="text-orange-600">*</span> Required</p>
