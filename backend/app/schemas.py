@@ -44,6 +44,15 @@ class HoursItem(BaseModel):
     hours: str
 
 
+class ReviewItem(BaseModel):
+    text: str
+    rating: int
+    author_name: str
+    author_location: str | None = None
+    author_photo_url: str | None = None
+    created_at: str
+
+
 class PopularDishItem(BaseModel):
     display_name: str
     review_count: int
@@ -66,6 +75,7 @@ class RestaurantCard(BaseModel):
     phone: str | None = None
     short_address: str | None = None
     popular_dishes: list[PopularDishItem] | None = None
+    reviews: list[ReviewItem] | None = None
 
 
 class NextRestaurantResponse(BaseModel):

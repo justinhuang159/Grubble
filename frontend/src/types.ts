@@ -27,6 +27,15 @@ export interface HoursItem {
   hours: string;
 }
 
+export interface ReviewItem {
+  text: string;
+  rating: number;
+  author_name: string;
+  author_location: string | null;
+  author_photo_url: string | null;
+  created_at: string;
+}
+
 export interface PopularDishItem {
   display_name: string;
   review_count: number;
@@ -49,6 +58,7 @@ export interface RestaurantCard {
   phone: string | null;
   short_address: string | null;
   popular_dishes?: PopularDishItem[] | null;
+  reviews?: ReviewItem[] | null;
 }
 
 export interface NextRestaurantResponse {

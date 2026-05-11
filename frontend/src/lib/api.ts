@@ -4,6 +4,7 @@ import type {
   JoinSessionRequest,
   NextRestaurantResponse,
   PopularDishItem,
+  ReviewItem,
   SessionResultsResponse,
   SessionResponse,
   StartSessionRequest,
@@ -64,6 +65,16 @@ export async function submitVote(
 
 export async function getSessionResults(roomCode: string): Promise<SessionResultsResponse> {
   const { data } = await api.get<SessionResultsResponse>(`/sessions/${roomCode}/results`);
+  return data;
+}
+
+export async function getReviews(
+  roomCode: string,
+  restaurantId: number,
+): Promise<{ reviews: ReviewItem[] }> {
+  const { data } = await api.get<{ reviews: ReviewItem[] }>(
+    `/sessions/${roomCode}/restaurants/${restaurantId}/reviews`,
+  );
   return data;
 }
 

@@ -22,6 +22,7 @@ from .schemas import (
     NextRestaurantResponse,
     PhotoItem,
     PopularDishItem,
+    ReviewItem,
     RestaurantCard,
     SessionResponse,
     SessionResultItem,
@@ -759,6 +760,41 @@ def get_restaurant_popular_dishes(
     restaurant.source_payload = payload
     db.commit()
     return {"popular_dishes": dishes}
+
+
+@app.get("/sessions/{room_code}/restaurants/{restaurant_id}/reviews")
+def get_restaurant_reviews(
+    room_code: str,
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    restaurant = db.scalar(
+        select(Restaurant).where(
+            Restaurant.id == restaurant_id,
+            Restaurant.session_id == session.id,
+        )
+    )
+    if not restaurant:
+        raise HTTPException(status_code=404, detail="Restaurant not found.")
+
+    payload = restaurant.source_payload or {}
+    if "reviews" in payload:
+        return {"reviews": payload["reviews"]}
+
+    try:
+        client = get_yelp_client_from_env()
+    except MissingRapidAPIConfigError:
+        raise HTTPException(status_code=500, detail="Yelp API not configured.")
+
+    reviews = client.get_reviews(restaurant.external_id, count=3)
+    payload = dict(payload)
+    payload["reviews"] = reviews
+    restaurant.source_payload = payload
+    db.commit()
+    return {"reviews": reviews}
 
 
 @app.websocket("/ws/sessions/{room_code}")

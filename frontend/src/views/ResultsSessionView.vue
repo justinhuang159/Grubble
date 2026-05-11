@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import { getPopularDishes } from "../lib/api";
+import { getPopularDishes, getReviews } from "../lib/api";
 import { formatRestaurantPrice } from "../lib/restaurant";
 import { useSessionStore } from "../stores/session";
-import type { PopularDishItem, RestaurantCard } from "../types";
+import type { PopularDishItem, RestaurantCard, ReviewItem } from "../types";
 
 const store = useSessionStore();
 
@@ -100,6 +100,74 @@ function closeDishesModal() {
   activeDishesId.value = null;
 }
 
+const dishLightboxOpen = ref(false);
+const dishLightboxIndex = ref(0);
+const dishLightboxDirection = ref<'next' | 'prev'>('next');
+const dishPhotos = computed(() => activeDishes.value.filter(d => d.photo_url));
+
+function openDishLightbox(dish: PopularDishItem) {
+  const idx = dishPhotos.value.findIndex(d => d.photo_url === dish.photo_url);
+  dishLightboxIndex.value = idx >= 0 ? idx : 0;
+  dishLightboxDirection.value = 'next';
+  dishLightboxOpen.value = true;
+}
+
+function closeDishLightbox() {
+  dishLightboxOpen.value = false;
+}
+
+function dishLightboxPrev() {
+  dishLightboxDirection.value = 'prev';
+  dishLightboxIndex.value = (dishLightboxIndex.value - 1 + dishPhotos.value.length) % dishPhotos.value.length;
+}
+
+function dishLightboxNext() {
+  dishLightboxDirection.value = 'next';
+  dishLightboxIndex.value = (dishLightboxIndex.value + 1) % dishPhotos.value.length;
+}
+
+function dishLightboxGoTo(i: number) {
+  dishLightboxDirection.value = i > dishLightboxIndex.value ? 'next' : 'prev';
+  dishLightboxIndex.value = i;
+}
+
+let dishLightboxTouchStartX = 0;
+
+function dishLightboxTouchStart(e: TouchEvent) {
+  dishLightboxTouchStartX = e.touches[0].clientX;
+}
+
+function dishLightboxTouchEnd(e: TouchEvent) {
+  const delta = e.changedTouches[0].clientX - dishLightboxTouchStartX;
+  if (Math.abs(delta) < 50) return;
+  if (delta < 0) dishLightboxNext();
+  else dishLightboxPrev();
+}
+
+// Reviews
+const reviewsOpenMap = ref<Record<number, boolean>>({});
+const reviewsLoadingMap = ref<Record<number, boolean>>({});
+const reviewItemsMap = ref<Record<number, ReviewItem[]>>({});
+const reviewExpandedMap = ref<Record<string, boolean>>({});
+
+async function toggleReviews(restaurantId: number) {
+  if (reviewsOpenMap.value[restaurantId]) {
+    reviewsOpenMap.value[restaurantId] = false;
+    return;
+  }
+  reviewsOpenMap.value[restaurantId] = true;
+  if (reviewItemsMap.value[restaurantId]?.length) return;
+  reviewsLoadingMap.value[restaurantId] = true;
+  try {
+    const result = await getReviews(store.session!.room_code, restaurantId);
+    reviewItemsMap.value[restaurantId] = result.reviews;
+  } catch {
+    reviewItemsMap.value[restaurantId] = [];
+  } finally {
+    reviewsLoadingMap.value[restaurantId] = false;
+  }
+}
+
 // Lightbox
 const lightboxOpen = ref(false);
 const lightboxPhotos = ref<{ url: string; caption: string | null }[]>([]);
@@ -132,7 +200,11 @@ function lightboxGoTo(i: number) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (lightboxOpen.value) {
+  if (dishLightboxOpen.value) {
+    if (e.key === "Escape") closeDishLightbox();
+    else if (e.key === "ArrowLeft") dishLightboxPrev();
+    else if (e.key === "ArrowRight") dishLightboxNext();
+  } else if (lightboxOpen.value) {
     if (e.key === "Escape") closeLightbox();
     else if (e.key === "ArrowLeft") lightboxPrev();
     else if (e.key === "ArrowRight") lightboxNext();
@@ -347,7 +419,8 @@ onUnmounted(() => {
                 v-if="dish.photo_url"
                 :src="dish.photo_url"
                 :alt="dish.display_name"
-                class="aspect-square w-full object-cover"
+                class="aspect-square w-full cursor-pointer object-cover"
+                @click="openDishLightbox(dish)"
               />
               <div v-else class="flex aspect-square items-center justify-center bg-stone-100">
                 <svg class="h-8 w-8 text-stone-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -361,6 +434,70 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </Transition>
+  </Teleport>
+
+  <!-- Dish photo lightbox -->
+  <Teleport to="body">
+  <Transition name="lightbox">
+    <div
+      v-if="dishLightboxOpen"
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md"
+      @click.self="closeDishLightbox"
+      @touchstart.passive="dishLightboxTouchStart"
+      @touchend="dishLightboxTouchEnd"
+    >
+      <div class="relative mx-4 w-full max-w-lg">
+        <div class="relative overflow-hidden rounded-2xl bg-black shadow-2xl">
+          <div class="grid overflow-hidden">
+            <Transition :name="dishLightboxDirection === 'next' ? 'lb-slide-left' : 'lb-slide-right'">
+              <img
+                :key="dishLightboxIndex"
+                :src="dishPhotos[dishLightboxIndex].photo_url!"
+                :alt="dishPhotos[dishLightboxIndex].display_name"
+                class="block max-h-[80vh] w-full object-contain"
+              />
+            </Transition>
+          </div>
+          <button
+            class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="closeDishLightbox"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            v-if="dishPhotos.length > 1"
+            class="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="dishLightboxPrev"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            v-if="dishPhotos.length > 1"
+            class="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            @click="dishLightboxNext"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          <div v-if="dishPhotos.length > 1" class="absolute inset-x-0 bottom-3 flex justify-center gap-1.5 px-6">
+            <button
+              v-for="(_, i) in dishPhotos"
+              :key="i"
+              class="h-1 flex-1 rounded-full transition-all duration-300"
+              :class="i === dishLightboxIndex ? 'bg-white' : 'bg-white/35'"
+              @click.stop="dishLightboxGoTo(i)"
+            />
+          </div>
+        </div>
+        <p class="mt-3 text-center text-sm font-medium text-white/80">{{ dishPhotos[dishLightboxIndex].display_name }}</p>
       </div>
     </div>
   </Transition>
@@ -398,7 +535,8 @@ onUnmounted(() => {
       >
         <div class="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
 
-          <!-- Carousel -->
+          <!-- Carousel + popular dishes -->
+          <div class="flex flex-col gap-2">
           <div
             class="relative h-40 overflow-hidden rounded-[1.5rem] bg-stone-100"
             @touchstart.passive="carouselTouchStart"
@@ -457,6 +595,18 @@ onUnmounted(() => {
             </template>
           </div>
 
+          <!-- Popular dishes button -->
+          <button
+            class="metric-chip w-full cursor-pointer justify-center gap-1.5 hover:opacity-75 transition-opacity"
+            @click="openDishesModal(item.restaurant.id)"
+          >
+            <svg class="h-3.5 w-3.5 text-stone-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            Popular Dishes
+          </button>
+          </div>
+
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div class="min-w-0">
               <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">#{{ (currentPage - 1) * PAGE_SIZE + idx + 1 }}</p>
@@ -497,19 +647,43 @@ onUnmounted(() => {
                   {{ formatRestaurantPrice(item.restaurant.price) }}
                 </span>
                 <span v-if="item.restaurant.rating" class="metric-chip">{{ item.restaurant.rating }} stars</span>
-                <span v-if="item.restaurant.review_count" class="metric-chip">
+                <button v-if="item.restaurant.review_count" class="metric-chip cursor-pointer hover:opacity-75 transition-opacity inline-flex items-center gap-1" @click="toggleReviews(item.restaurant.id)">
                   {{ item.restaurant.review_count }} reviews
-                </span>
+                  <svg class="h-3 w-3 transition-transform" :class="reviewsOpenMap[item.restaurant.id] ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
-              <button
-                class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1 text-sm font-medium text-stone-700 shadow-sm transition-colors hover:bg-stone-50"
-                @click="openDishesModal(item.restaurant.id)"
-              >
-                <svg class="h-3.5 w-3.5 text-stone-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                Popular Dishes
-              </button>
+
+              <!-- Inline reviews panel -->
+              <Transition name="hours-expand">
+                <div v-if="reviewsOpenMap[item.restaurant.id]" class="mt-2 space-y-2 rounded-xl bg-stone-50/80 px-3 py-2.5">
+                  <div v-if="reviewsLoadingMap[item.restaurant.id]" class="flex justify-center py-3">
+                    <div class="h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                  </div>
+                  <p v-else-if="!reviewItemsMap[item.restaurant.id]?.length" class="text-center text-xs text-stone-400 py-2">No reviews found.</p>
+                  <div v-else v-for="(review, idx) in reviewItemsMap[item.restaurant.id]" :key="review.author_name + review.created_at" class="space-y-1">
+                    <div class="flex items-center gap-2">
+                      <img v-if="review.author_photo_url" :src="review.author_photo_url" :alt="review.author_name" class="h-6 w-6 rounded-full object-cover shrink-0" />
+                      <div v-else class="h-6 w-6 rounded-full bg-stone-200 flex items-center justify-center shrink-0">
+                        <span class="text-[10px] font-semibold text-stone-500">{{ review.author_name.charAt(0) }}</span>
+                      </div>
+                      <div class="min-w-0">
+                        <span class="text-xs font-semibold text-stone-700">{{ review.author_name }}</span>
+                        <span v-if="review.author_location" class="text-xs text-stone-400"> · {{ review.author_location }}</span>
+                      </div>
+                      <div class="ml-auto flex items-center gap-1 shrink-0">
+                        <span class="text-xs text-orange-500">{{ '★'.repeat(review.rating) }}{{ '☆'.repeat(5 - review.rating) }}</span>
+                      </div>
+                    </div>
+                    <p class="text-xs text-stone-600 leading-relaxed" :class="reviewExpandedMap[`${item.restaurant.id}_${idx}`] ? '' : 'line-clamp-3'">{{ review.text }}</p>
+                    <button v-if="review.text.length > 200 && !reviewExpandedMap[`${item.restaurant.id}_${idx}`]" class="text-xs text-orange-500 hover:text-orange-600 transition-colors" @click="reviewExpandedMap[`${item.restaurant.id}_${idx}`] = true">see more</button>
+                    <button v-else-if="reviewExpandedMap[`${item.restaurant.id}_${idx}`]" class="text-xs text-orange-500 hover:text-orange-600 transition-colors" @click="reviewExpandedMap[`${item.restaurant.id}_${idx}`] = false">see less</button>
+                    <div v-if="idx < reviewItemsMap[item.restaurant.id].length - 1" class="border-t border-stone-200 pt-2" />
+                  </div>
+                </div>
+              </Transition>
+
             </div>
             <div class="shrink-0 rounded-2xl bg-emerald-50 px-4 py-3 text-right">
               <p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Yes votes</p>
@@ -565,6 +739,16 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.hours-expand-enter-active,
+.hours-expand-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.hours-expand-enter-from,
+.hours-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .dishes-modal-enter-active,
 .dishes-modal-leave-active {
   transition: opacity 0.2s ease;

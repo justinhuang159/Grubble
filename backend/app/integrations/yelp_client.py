@@ -95,3 +95,35 @@ class YelpClient:
             return []
         payload = response.json()
         return payload.get("data", {}).get("popular_dishes", [])
+
+    def get_reviews(self, business_id: str, count: int = 3) -> list[dict]:
+        headers = {
+            "X-RapidAPI-Key": self.api_key,
+            "X-RapidAPI-Host": self.api_host,
+        }
+        url = f"{self.base_url}/reviews"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    url,
+                    headers=headers,
+                    params={"business_id": business_id, "reviews_per_page": count, "sort_by": "Yelp_sort"},
+                )
+            if response.status_code >= 400:
+                return []
+        except httpx.HTTPError:
+            return []
+        raw = response.json().get("reviews", [])
+        results = []
+        for r in raw:
+            profile_photo = (r.get("author") or {}).get("profilePhoto") or {}
+            photo_url = (profile_photo.get("photoUrl") or {}).get("userSrc")
+            results.append({
+                "text": (r.get("text") or {}).get("full", ""),
+                "rating": r.get("rating", 0),
+                "author_name": (r.get("author") or {}).get("displayName", ""),
+                "author_location": (r.get("author") or {}).get("displayLocation"),
+                "author_photo_url": photo_url,
+                "created_at": r.get("reviewCreatedAt", ""),
+            })
+        return results
