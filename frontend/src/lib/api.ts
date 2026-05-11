@@ -78,6 +78,13 @@ export async function getReviews(
   return data;
 }
 
+export async function validateLocation(locationText: string): Promise<{ valid: boolean }> {
+  const { data } = await api.get<{ valid: boolean }>("/validate-location", {
+    params: { location_text: locationText },
+  });
+  return data;
+}
+
 export async function getPopularDishes(
   roomCode: string,
   restaurantId: number,

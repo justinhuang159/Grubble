@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
@@ -795,6 +795,22 @@ def get_restaurant_reviews(
     restaurant.source_payload = payload
     db.commit()
     return {"reviews": reviews}
+
+
+@app.get("/validate-location")
+async def validate_location(location_text: str = Query(...)):
+    try:
+        client = get_yelp_client_from_env()
+    except MissingRapidAPIConfigError:
+        raise HTTPException(status_code=500, detail="Yelp API not configured.")
+    results = client.search_businesses(
+        term="restaurants",
+        location=location_text,
+        price=None,
+        radius_meters=None,
+        limit=1,
+    )
+    return {"valid": len(results) > 0}
 
 
 @app.websocket("/ws/sessions/{room_code}")

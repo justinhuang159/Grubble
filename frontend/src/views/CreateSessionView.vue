@@ -1,7 +1,21 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 
 import { useSessionStore } from "../stores/session";
+import { validateLocation } from "../lib/api";
+
+interface NominatimResult {
+  display_name: string;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    suburb?: string;
+    state?: string;
+    country?: string;
+    country_code?: string;
+  };
+}
 
 const emit = defineEmits<{
   created: [];
@@ -15,9 +29,124 @@ const price = ref("");
 const radiusMiles = ref();
 const submitted = ref(false);
 
+const locationSuggestions = ref<NominatimResult[]>([]);
+const showSuggestions = ref(false);
+const highlightedIndex = ref(-1);
+const locationValidation = ref<"idle" | "validating" | "valid" | "invalid">("idle");
+const geoLoading = ref(false);
+const geoError = ref("");
+let nominatimTimer: ReturnType<typeof setTimeout> | null = null;
+let validationTimer: ReturnType<typeof setTimeout> | null = null;
+
 const hostNameInvalid = computed(() => submitted.value && !hostName.value.trim());
 const locationInvalid = computed(() => submitted.value && !locationText.value.trim());
 const hasErrors = computed(() => hostNameInvalid.value || locationInvalid.value);
+
+function formatSuggestion(r: NominatimResult): string {
+  const a = r.address;
+  if (!a) return r.display_name;
+  const city = a.city ?? a.town ?? a.village ?? a.suburb;
+  const region = a.state ?? a.country;
+  if (city && region) return `${city}, ${region}`;
+  if (city) return city;
+  return r.display_name.split(",").slice(0, 2).join(",").trim();
+}
+
+watch(locationText, (val) => {
+  locationValidation.value = "idle";
+  if (nominatimTimer) clearTimeout(nominatimTimer);
+  if (!val || val.length < 3) {
+    locationSuggestions.value = [];
+    showSuggestions.value = false;
+    return;
+  }
+  nominatimTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=1`,
+      );
+      locationSuggestions.value = await res.json();
+      showSuggestions.value = locationSuggestions.value.length > 0;
+      highlightedIndex.value = -1;
+    } catch {
+      /* silent */
+    }
+  }, 350);
+});
+
+function selectSuggestion(r: NominatimResult) {
+  locationText.value = formatSuggestion(r);
+  showSuggestions.value = false;
+  locationSuggestions.value = [];
+  triggerValidation(locationText.value);
+}
+
+function triggerValidation(val: string) {
+  if (!val) return;
+  locationValidation.value = "validating";
+  if (validationTimer) clearTimeout(validationTimer);
+  validationTimer = setTimeout(async () => {
+    try {
+      const { valid } = await validateLocation(val);
+      locationValidation.value = valid ? "valid" : "invalid";
+    } catch {
+      locationValidation.value = "idle";
+    }
+  }, 600);
+}
+
+async function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    geoError.value = "Geolocation is not supported by your browser.";
+    return;
+  }
+  geoLoading.value = true;
+  geoError.value = "";
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const { latitude: lat, longitude: lon } = pos.coords;
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10&addressdetails=1`,
+        );
+        const data: NominatimResult = await res.json();
+        locationText.value = formatSuggestion(data);
+        locationSuggestions.value = [];
+        showSuggestions.value = false;
+        triggerValidation(locationText.value);
+      } catch {
+        geoError.value = "Could not determine your location. Please type it manually.";
+      } finally {
+        geoLoading.value = false;
+      }
+    },
+    () => {
+      geoError.value = "Location access denied. Please type your location manually.";
+      geoLoading.value = false;
+    },
+  );
+}
+
+function onLocationBlur() {
+  setTimeout(() => { showSuggestions.value = false; }, 150);
+  triggerValidation(locationText.value);
+}
+
+function onLocationKeydown(e: KeyboardEvent) {
+  if (!showSuggestions.value) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    highlightedIndex.value = Math.min(highlightedIndex.value + 1, locationSuggestions.value.length - 1);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    highlightedIndex.value = Math.max(highlightedIndex.value - 1, -1);
+  } else if (e.key === "Enter" && highlightedIndex.value >= 0) {
+    e.preventDefault();
+    selectSuggestion(locationSuggestions.value[highlightedIndex.value]);
+  } else if (e.key === "Escape") {
+    showSuggestions.value = false;
+  }
+}
 
 async function submit() {
   submitted.value = true;
@@ -75,17 +204,72 @@ async function submit() {
 
       <div>
         <label class="field-label" for="location-text">Location <span class="text-orange-600">*</span></label>
-        <input
-          id="location-text"
-          v-model="locationText"
-          class="app-input"
-          :class="locationInvalid ? 'border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-200' : ''"
-          placeholder="Neighborhood, city, or full address"
-          @input="submitted = false"
-        />
+        <div class="relative">
+          <input
+            id="location-text"
+            v-model="locationText"
+            class="app-input pr-8"
+            :class="locationInvalid ? 'border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-200' : ''"
+            placeholder="Neighborhood, city, or full address"
+            autocomplete="off"
+            @input="submitted = false"
+            @keydown="onLocationKeydown"
+            @blur="onLocationBlur"
+          />
+          <span
+            v-if="locationValidation === 'validating'"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 animate-spin select-none pointer-events-none"
+          >⟳</span>
+          <span
+            v-else-if="locationValidation === 'valid'"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 text-sm select-none pointer-events-none"
+          >✓</span>
+          <span
+            v-else-if="locationValidation === 'invalid'"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500 text-sm select-none pointer-events-none"
+          >⚠</span>
+
+          <ul
+            v-if="showSuggestions"
+            class="absolute z-20 left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-stone-100 overflow-hidden"
+          >
+            <li
+              v-for="(r, i) in locationSuggestions"
+              :key="r.display_name"
+              @mousedown.prevent="selectSuggestion(r)"
+              class="px-4 py-2.5 text-sm cursor-pointer transition-colors flex items-baseline gap-2"
+              :class="i === highlightedIndex ? 'bg-orange-50 text-orange-700' : 'text-stone-700 hover:bg-stone-50'"
+            >
+              <span class="font-medium shrink-0">{{ formatSuggestion(r) }}</span>
+              <span class="text-xs text-stone-400 truncate">{{ r.display_name }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="mt-1.5 flex items-center gap-1.5">
+          <button
+            type="button"
+            class="flex items-center gap-1 text-xs text-stone-400 hover:text-orange-600 transition-colors"
+            :disabled="geoLoading"
+            @click="useCurrentLocation"
+          >
+            <span v-if="geoLoading" class="animate-spin">⟳</span>
+            <svg v-else class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
+            </svg>
+            Use my current location
+          </button>
+        </div>
+        <Transition name="field-error">
+          <p v-if="geoError" class="mt-1 text-xs font-medium text-red-600">{{ geoError }}</p>
+        </Transition>
         <Transition name="field-error">
           <p v-if="locationInvalid" class="mt-1.5 text-xs font-medium text-red-600">
             Location is required.
+          </p>
+        </Transition>
+        <Transition name="field-error">
+          <p v-if="locationValidation === 'invalid' && !locationInvalid" class="mt-1.5 text-xs font-medium text-amber-600">
+            No restaurants found here — try a nearby city or neighborhood.
           </p>
         </Transition>
       </div>
