@@ -480,7 +480,7 @@ onUnmounted(() => {
               <a
                 v-if="store.currentRestaurant.phone"
                 :href="`tel:${store.currentRestaurant.phone}`"
-                class="flex items-center gap-1.5 text-sm text-stone-600 hover:text-orange-700 transition-colors"
+                class="flex w-fit items-center gap-1.5 text-sm text-stone-600 hover:text-orange-700 transition-colors"
               >
                 <svg class="h-3.5 w-3.5 shrink-0 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -492,7 +492,7 @@ onUnmounted(() => {
                 :href="store.currentRestaurant.yelp_url"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="flex items-center gap-1.5 text-sm text-stone-600 hover:text-orange-700 transition-colors"
+                class="flex w-fit items-center gap-1.5 text-sm text-stone-600 hover:text-orange-700 transition-colors"
               >
                 <svg class="h-3.5 w-3.5 shrink-0 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -556,7 +556,7 @@ onUnmounted(() => {
 
           <!-- Popular dishes button -->
           <button
-            class="self-start inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-50"
+            class="self-start inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1 text-sm font-medium text-stone-700 shadow-sm transition-colors hover:bg-stone-50"
             @click="openDishesModal"
           >
             <svg class="h-3.5 w-3.5 text-stone-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
