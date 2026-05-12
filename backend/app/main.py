@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,7 @@ from .schemas import (
     CreateSessionRequest,
     HoursItem,
     JoinSessionRequest,
+    MySessionsResponse,
     NextRestaurantResponse,
     PhotoItem,
     PopularDishItem,
@@ -27,6 +30,7 @@ from .schemas import (
     SessionResponse,
     SessionResultItem,
     SessionResultsResponse,
+    SessionSummary,
     StartSessionRequest,
     VoteRequest,
     VoteResponse,
@@ -78,6 +82,32 @@ class ConnectionManager:
 
 
 ws_manager = ConnectionManager()
+
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+_http_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_http_bearer),
+) -> str | None:
+    if not credentials:
+        return None
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload["sub"]
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def require_auth(user_id: str | None = Depends(get_current_user)) -> str:
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user_id
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -430,7 +460,11 @@ def get_next_restaurant_for_user(db: Session, session_id: str, user_name: str) -
 
 
 @app.post("/sessions", response_model=SessionResponse)
-def create_session(req: CreateSessionRequest, db: Session = Depends(get_db)):
+def create_session(
+    req: CreateSessionRequest,
+    db: Session = Depends(get_db),
+    owner_user_id: str = Depends(require_auth),
+):
     room_code = generate_room_code(db)
     session = SessionModel(
         room_code=room_code,
@@ -440,16 +474,63 @@ def create_session(req: CreateSessionRequest, db: Session = Depends(get_db)):
         price=req.price,
         radius_meters=req.radius_meters,
         location_text=req.location_text,
+        owner_user_id=owner_user_id,
     )
-    session.participants.append(Participant(user_name=req.host_name))
+    session.participants.append(Participant(user_name=req.host_name, user_id=owner_user_id))
     db.add(session)
     db.commit()
     db.refresh(session)
     return build_response(session)
 
 
+@app.get("/sessions/my", response_model=MySessionsResponse)
+def my_sessions(user_id: str = Depends(require_auth), db: Session = Depends(get_db)):
+    def to_summary(s: SessionModel) -> SessionSummary:
+        return SessionSummary(
+            room_code=s.room_code,
+            host_name=s.host_name,
+            status=s.status,
+            location_text=s.location_text,
+            created_at=s.created_at,
+            participant_count=len(s.participants),
+        )
+
+    hosted = db.scalars(
+        select(SessionModel).where(SessionModel.owner_user_id == user_id).order_by(SessionModel.created_at.desc())
+    ).all()
+
+    joined = db.scalars(
+        select(SessionModel)
+        .join(Participant, Participant.session_id == SessionModel.id)
+        .where(Participant.user_id == user_id, SessionModel.owner_user_id != user_id)
+        .order_by(SessionModel.created_at.desc())
+    ).all()
+
+    return MySessionsResponse(
+        hosted=[to_summary(s) for s in hosted],
+        joined=[to_summary(s) for s in joined],
+    )
+
+
+@app.delete("/sessions/{room_code}")
+def delete_session(room_code: str, user_id: str = Depends(require_auth), db: Session = Depends(get_db)):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not the session owner")
+    db.delete(session)
+    db.commit()
+    return {"deleted": True}
+
+
 @app.post("/sessions/{room_code}/join", response_model=SessionResponse)
-def join_session(room_code: str, req: JoinSessionRequest, db: Session = Depends(get_db)):
+def join_session(
+    room_code: str,
+    req: JoinSessionRequest,
+    db: Session = Depends(get_db),
+    user_id: str | None = Depends(get_current_user),
+):
     session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -463,7 +544,7 @@ def join_session(room_code: str, req: JoinSessionRequest, db: Session = Depends(
     if duplicate:
         raise HTTPException(status_code=409, detail="Participant name already exists in this session")
 
-    session.participants.append(Participant(user_name=req.user_name))
+    session.participants.append(Participant(user_name=req.user_name, user_id=user_id))
     db.commit()
     db.refresh(session)
     return build_response(session)

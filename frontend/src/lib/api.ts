@@ -1,7 +1,9 @@
 import axios from "axios";
+import { supabase } from "./supabase";
 import type {
   CreateSessionRequest,
   JoinSessionRequest,
+  MySessionsResponse,
   NextRestaurantResponse,
   PopularDishItem,
   ReviewItem,
@@ -17,6 +19,13 @@ const baseURL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const api = axios.create({
   baseURL,
   timeout: 10000,
+});
+
+api.interceptors.request.use(async (config) => {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
 export async function createSession(payload: CreateSessionRequest): Promise<SessionResponse> {
@@ -83,6 +92,15 @@ export async function validateLocation(locationText: string): Promise<{ valid: b
     params: { location_text: locationText },
   });
   return data;
+}
+
+export async function getMySessions(): Promise<MySessionsResponse> {
+  const { data } = await api.get<MySessionsResponse>("/sessions/my");
+  return data;
+}
+
+export async function deleteSession(roomCode: string): Promise<void> {
+  await api.delete(`/sessions/${roomCode}`);
 }
 
 export async function getPopularDishes(

@@ -19,6 +19,7 @@ class Session(Base):
     price: Mapped[str | None] = mapped_column(String(16), nullable=True)
     radius_meters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     location_text: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     participants: Mapped[list["Participant"]] = relationship(
@@ -52,6 +53,7 @@ class Participant(Base):
         index=True,
     )
     user_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     joined_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     session: Mapped[Session] = relationship(back_populates="participants")

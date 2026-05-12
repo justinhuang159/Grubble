@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 from typing import Literal
 
@@ -112,3 +113,19 @@ class SessionResultItem(BaseModel):
 class SessionResultsResponse(BaseModel):
     total_participants: int
     results: List[SessionResultItem]
+
+
+class SessionSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    room_code: str
+    host_name: str
+    status: str
+    location_text: str | None
+    created_at: datetime
+    participant_count: int
+
+
+class MySessionsResponse(BaseModel):
+    hosted: List[SessionSummary]
+    joined: List[SessionSummary]

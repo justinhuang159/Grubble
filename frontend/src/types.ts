@@ -107,4 +107,19 @@ export interface SessionResponse {
   radius_meters: number | null;
   location_text: string | null;
   participants: string[];
+  owner_user_id: string | null;
+}
+
+export interface SessionSummary {
+  room_code: string;
+  host_name: string;
+  status: SessionStatus;
+  location_text: string | null;
+  created_at: string;
+  participant_count: number;
+}
+
+export interface MySessionsResponse {
+  hosted: SessionSummary[];
+  joined: SessionSummary[];
 }
