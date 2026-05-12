@@ -6,6 +6,7 @@ const auth = useAuthStore();
 const mode = ref<"signin" | "signup">("signin");
 const email = ref("");
 const password = ref("");
+const displayName = ref("");
 const error = ref("");
 const loading = ref(false);
 const signedUp = ref(false);
@@ -15,7 +16,7 @@ async function submit() {
   loading.value = true;
   try {
     if (mode.value === "signup") {
-      await auth.signUp(email.value, password.value);
+      await auth.signUp(email.value, password.value, displayName.value);
       signedUp.value = true;
     } else {
       await auth.signIn(email.value, password.value);
@@ -87,6 +88,19 @@ async function submit() {
         />
       </div>
 
+      <div v-if="mode === 'signup'">
+        <label class="field-label" for="auth-display-name">Display Name <span class="text-orange-600">*</span></label>
+        <input
+          id="auth-display-name"
+          v-model="displayName"
+          class="app-input"
+          type="text"
+          placeholder="How the table will know you"
+          autocomplete="nickname"
+          required
+        />
+      </div>
+
       <button :disabled="loading" class="app-button w-full" type="submit">
         {{ loading ? "Please wait..." : mode === "signin" ? "Sign In" : "Create Account" }}
       </button>
@@ -96,7 +110,7 @@ async function submit() {
         <button
           type="button"
           class="ml-1 font-medium text-orange-600 hover:text-orange-700"
-          @click="mode = mode === 'signin' ? 'signup' : 'signin'; error = ''; signedUp = false"
+          @click="mode = mode === 'signin' ? 'signup' : 'signin'; error = ''; signedUp = false; displayName = ''"
         >
           {{ mode === "signin" ? "Sign up" : "Sign in" }}
         </button>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
+import AccountSettingsModal from "./views/AccountSettingsModal.vue";
 import AuthView from "./views/AuthView.vue";
 import CreateSessionView from "./views/CreateSessionView.vue";
 import HistoryView from "./views/HistoryView.vue";
@@ -14,6 +15,7 @@ import { useSessionStore } from "./stores/session";
 const store = useSessionStore();
 const auth = useAuthStore();
 const mode = ref<"create" | "join">("create");
+const showSettings = ref(false);
 
 const inSession = computed(() => Boolean(store.session));
 const inActiveSession = computed(() => store.session?.status === "active");
@@ -28,7 +30,17 @@ const inActiveSession = computed(() => store.session?.status === "active");
           <h1 class="hero-title text-stone-900">Grubble</h1>
         </div>
         <div v-if="auth.isLoggedIn" class="flex shrink-0 items-center gap-2 pt-1">
-          <span class="max-w-[140px] truncate text-xs text-stone-400">{{ auth.user?.email }}</span>
+          <span class="max-w-[140px] truncate text-xs text-stone-400">{{ auth.displayName || auth.user?.email }}</span>
+          <button
+            class="rounded-full border border-stone-200 bg-white p-1.5 text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600"
+            aria-label="Account settings"
+            @click="showSettings = true"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
           <button
             class="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700"
             @click="auth.signOut()"
@@ -36,6 +48,8 @@ const inActiveSession = computed(() => store.session?.status === "active");
             Sign out
           </button>
         </div>
+
+        <AccountSettingsModal v-if="showSettings" @close="showSettings = false" />
       </div>
 
       <p class="hero-subtitle">

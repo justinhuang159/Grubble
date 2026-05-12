@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 
+import { useAuthStore } from "../stores/auth";
 import { useSessionStore } from "../stores/session";
 import { validateLocation } from "../lib/api";
 
@@ -24,8 +25,18 @@ const emit = defineEmits<{
   created: [];
 }>();
 
+const auth = useAuthStore();
 const store = useSessionStore();
 const hostName = ref("");
+
+onMounted(() => {
+  if (!hostName.value && auth.displayName) hostName.value = auth.displayName;
+});
+
+watch(
+  () => auth.displayName,
+  (name) => { if (!hostName.value && name) hostName.value = name; }
+);
 const locationText = ref("");
 const cuisine = ref("");
 const selectedPriceTiers = ref<number[]>([]);

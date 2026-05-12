@@ -1,15 +1,26 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 
+import { useAuthStore } from "../stores/auth";
 import { useSessionStore } from "../stores/session";
 
 const emit = defineEmits<{
   joined: [];
 }>();
 
+const auth = useAuthStore();
 const store = useSessionStore();
 const roomCode = ref("");
 const userName = ref("");
+
+onMounted(() => {
+  if (!userName.value && auth.displayName) userName.value = auth.displayName;
+});
+
+watch(
+  () => auth.displayName,
+  (name) => { if (!userName.value && name) userName.value = name; }
+);
 const submitted = ref(false);
 
 const roomCodeInvalid = computed(() => submitted.value && !roomCode.value.trim());

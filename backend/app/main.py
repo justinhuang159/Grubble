@@ -9,7 +9,9 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt import PyJWKClient
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
@@ -83,7 +85,10 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+if not SUPABASE_URL:
+    raise RuntimeError("SUPABASE_URL is not set in the environment")
+_jwks_client = PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")
 _http_bearer = HTTPBearer(auto_error=False)
 
 
@@ -93,15 +98,16 @@ def get_current_user(
     if not credentials:
         return None
     try:
-        payload = jwt.decode(
+        signing_key = _jwks_client.get_signing_key_from_jwt(credentials.credentials)
+        payload = pyjwt.decode(
             credentials.credentials,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["RS256", "ES256", "EdDSA"],
             audience="authenticated",
         )
         return payload["sub"]
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}")
 
 
 def require_auth(user_id: str | None = Depends(get_current_user)) -> str:

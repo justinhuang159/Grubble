@@ -8,6 +8,9 @@ export const useAuthStore = defineStore("auth", () => {
   const loading = ref(true);
 
   const isLoggedIn = computed(() => !!user.value);
+  const displayName = computed<string>(
+    () => (user.value?.user_metadata?.display_name as string) ?? ""
+  );
 
   async function init() {
     const { data } = await supabase.auth.getSession();
@@ -18,8 +21,12 @@ export const useAuthStore = defineStore("auth", () => {
     });
   }
 
-  async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
+  async function signUp(email: string, password: string, name: string = "") {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: name.trim() } },
+    });
     if (error) throw error;
   }
 
@@ -32,5 +39,12 @@ export const useAuthStore = defineStore("auth", () => {
     await supabase.auth.signOut();
   }
 
-  return { user, loading, isLoggedIn, init, signUp, signIn, signOut };
+  async function updateDisplayName(name: string) {
+    const { error } = await supabase.auth.updateUser({
+      data: { display_name: name.trim() },
+    });
+    if (error) throw error;
+  }
+
+  return { user, loading, isLoggedIn, displayName, init, signUp, signIn, signOut, updateDisplayName };
 });
