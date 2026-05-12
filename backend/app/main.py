@@ -468,6 +468,11 @@ def get_next_restaurant_for_user(db: Session, session_id: str, user_name: str) -
     )
 
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
 @app.post("/sessions", response_model=SessionResponse)
 def create_session(
     req: CreateSessionRequest,
@@ -612,7 +617,7 @@ async def remove_participant(
     db.delete(participant)
     db.commit()
 
-    await ws_manager.broadcast(room_code, {
+    await manager.broadcast(room_code, {
         "event": "participant_removed",
         "user_name": user_name,
     })
