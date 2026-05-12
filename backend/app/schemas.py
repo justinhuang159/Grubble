@@ -33,6 +33,7 @@ class SessionResponse(BaseModel):
     radius_meters: int | None
     location_text: str | None
     participants: List[str]
+    owner_user_id: str | None = None
 
 
 class PhotoItem(BaseModel):
@@ -115,6 +116,10 @@ class SessionResultsResponse(BaseModel):
     results: List[SessionResultItem]
 
 
+class ParticipantSummary(BaseModel):
+    user_name: str
+
+
 class SessionSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -124,6 +129,18 @@ class SessionSummary(BaseModel):
     location_text: str | None
     created_at: datetime
     participant_count: int
+    cuisine: str | None = None
+    price: str | None = None
+    radius_meters: int | None = None
+    my_participant_name: str | None = None
+    participants: List[ParticipantSummary] | None = None
+
+
+class UpdateFiltersRequest(BaseModel):
+    location_text: str | None = None
+    cuisine: str | None = None
+    price: str | None = None
+    radius_meters: int | None = Field(default=None, ge=1, le=40000)
 
 
 class MySessionsResponse(BaseModel):

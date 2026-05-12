@@ -25,6 +25,7 @@ from .schemas import (
     JoinSessionRequest,
     MySessionsResponse,
     NextRestaurantResponse,
+    ParticipantSummary,
     PhotoItem,
     PopularDishItem,
     ReviewItem,
@@ -34,6 +35,7 @@ from .schemas import (
     SessionResultsResponse,
     SessionSummary,
     StartSessionRequest,
+    UpdateFiltersRequest,
     VoteRequest,
     VoteResponse,
 )
@@ -136,6 +138,7 @@ def build_response(session: SessionModel) -> SessionResponse:
         radius_meters=session.radius_meters,
         location_text=session.location_text,
         participants=participants,
+        owner_user_id=session.owner_user_id,
     )
 
 
@@ -491,7 +494,7 @@ def create_session(
 
 @app.get("/sessions/my", response_model=MySessionsResponse)
 def my_sessions(user_id: str = Depends(require_auth), db: Session = Depends(get_db)):
-    def to_summary(s: SessionModel) -> SessionSummary:
+    def to_hosted(s: SessionModel) -> SessionSummary:
         return SessionSummary(
             room_code=s.room_code,
             host_name=s.host_name,
@@ -499,6 +502,25 @@ def my_sessions(user_id: str = Depends(require_auth), db: Session = Depends(get_
             location_text=s.location_text,
             created_at=s.created_at,
             participant_count=len(s.participants),
+            cuisine=s.cuisine,
+            price=s.price,
+            radius_meters=s.radius_meters,
+            participants=[ParticipantSummary(user_name=p.user_name) for p in s.participants],
+        )
+
+    def to_joined(s: SessionModel) -> SessionSummary:
+        my_p = next((p for p in s.participants if p.user_id == user_id), None)
+        return SessionSummary(
+            room_code=s.room_code,
+            host_name=s.host_name,
+            status=s.status,
+            location_text=s.location_text,
+            created_at=s.created_at,
+            participant_count=len(s.participants),
+            cuisine=s.cuisine,
+            price=s.price,
+            radius_meters=s.radius_meters,
+            my_participant_name=my_p.user_name if my_p else None,
         )
 
     hosted = db.scalars(
@@ -513,8 +535,8 @@ def my_sessions(user_id: str = Depends(require_auth), db: Session = Depends(get_
     ).all()
 
     return MySessionsResponse(
-        hosted=[to_summary(s) for s in hosted],
-        joined=[to_summary(s) for s in joined],
+        hosted=[to_hosted(s) for s in hosted],
+        joined=[to_joined(s) for s in joined],
     )
 
 
@@ -530,6 +552,61 @@ def delete_session(room_code: str, user_id: str = Depends(require_auth), db: Ses
     return {"deleted": True}
 
 
+@app.patch("/sessions/{room_code}", response_model=SessionResponse)
+def update_session_filters(
+    room_code: str,
+    req: UpdateFiltersRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the host can edit filters")
+    if session.status != "waiting":
+        raise HTTPException(status_code=400, detail="Filters can only be changed while session is waiting")
+
+    if req.location_text is not None:
+        session.location_text = req.location_text
+    if req.cuisine is not None:
+        session.cuisine = req.cuisine or None
+    if req.price is not None:
+        session.price = req.price or None
+    if req.radius_meters is not None:
+        session.radius_meters = req.radius_meters
+
+    db.commit()
+    db.refresh(session)
+    return build_response(session)
+
+
+@app.delete("/sessions/{room_code}/participants/{user_name}", status_code=204)
+def remove_participant(
+    room_code: str,
+    user_name: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the host can remove participants")
+
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.session_id == session.id,
+            Participant.user_name == user_name,
+        )
+    )
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    db.delete(participant)
+    db.commit()
+
+
 @app.post("/sessions/{room_code}/join", response_model=SessionResponse)
 def join_session(
     room_code: str,
@@ -540,6 +617,16 @@ def join_session(
     session = db.scalar(select(SessionModel).where(SessionModel.room_code == room_code))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    if user_id:
+        existing_by_user = db.scalar(
+            select(Participant).where(
+                Participant.session_id == session.id,
+                Participant.user_id == user_id,
+            )
+        )
+        if existing_by_user:
+            return build_response(session)
 
     duplicate = db.scalar(
         select(Participant).where(

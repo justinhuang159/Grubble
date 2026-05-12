@@ -87,7 +87,7 @@
   }
 
   .hero-subtitle {
-    @apply mt-4 max-w-2xl text-sm leading-6 sm:text-base;
+    @apply mt-4 pb-5 max-w-2xl text-sm leading-6 sm:text-base;
     color: var(--muted-ink);
   }
 

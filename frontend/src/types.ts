@@ -110,6 +110,10 @@ export interface SessionResponse {
   owner_user_id: string | null;
 }
 
+export interface ParticipantSummary {
+  user_name: string;
+}
+
 export interface SessionSummary {
   room_code: string;
   host_name: string;
@@ -117,6 +121,11 @@ export interface SessionSummary {
   location_text: string | null;
   created_at: string;
   participant_count: number;
+  cuisine: string | null;
+  price: string | null;
+  radius_meters: number | null;
+  my_participant_name: string | null;
+  participants: ParticipantSummary[] | null;
 }
 
 export interface MySessionsResponse {

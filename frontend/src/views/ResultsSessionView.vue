@@ -506,7 +506,10 @@ onUnmounted(() => {
   <section class="glass-card">
     <div class="flex items-center justify-between gap-4">
       <div>
-        <h2 class="section-title text-stone-900">Session Results</h2>
+        <div class="flex items-center gap-3">
+          <h2 class="section-title text-stone-900">Session Results</h2>
+          <span class="status-pill">Room: {{ store.session?.room_code }}</span>
+        </div>
         <p class="section-copy">Ranked by yes votes, with the strongest picks surfaced first.</p>
       </div>
       <div class="flex items-center gap-2">
@@ -520,7 +523,7 @@ onUnmounted(() => {
           class="app-button"
           @click="store.resetState"
         >
-          Start New Session
+          Back to Home
         </button>
       </div>
     </div>

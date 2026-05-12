@@ -535,20 +535,22 @@ onUnmounted(() => {
 
   <section class="glass-card">
     <div class="flex items-center justify-between">
-      <h2 class="section-title text-stone-900">Swipe Deck</h2>
-      <span class="status-pill">
-        Room: {{ store.session?.room_code }}
-      </span>
-    </div>
-
-    <div class="mt-4">
-      <button
-        class="app-button-secondary"
-        :disabled="store.resultsLoading"
-        @click="store.openResults"
-      >
-        {{ store.resultsLoading ? "Loading..." : "View Results" }}
-      </button>
+      <div class="flex items-center gap-3">
+        <h2 class="section-title text-stone-900">Swipe Deck</h2>
+        <span class="status-pill">Room: {{ store.session?.room_code }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          class="app-button-secondary"
+          :disabled="store.resultsLoading"
+          @click="store.openResults"
+        >
+          {{ store.resultsLoading ? "Loading..." : "View Results" }}
+        </button>
+        <button class="app-button" @click="store.resetState()">
+          Back to Home
+        </button>
+      </div>
     </div>
 
     <div v-if="store.currentRestaurant" class="mt-6 overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/70 p-4 shadow-[0_20px_40px_rgba(28,25,23,0.08)]">

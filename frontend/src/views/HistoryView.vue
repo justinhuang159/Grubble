@@ -2,11 +2,20 @@
 import { onMounted, ref } from "vue";
 import { deleteSession, getMySessions } from "../lib/api";
 import type { SessionSummary } from "../types";
+import { useAuthStore } from "../stores/auth";
+import { useSessionStore } from "../stores/session";
+import EditFiltersModal from "./EditFiltersModal.vue";
+
+const auth = useAuthStore();
+const store = useSessionStore();
 
 const hosted = ref<SessionSummary[]>([]);
 const joined = ref<SessionSummary[]>([]);
 const loading = ref(true);
 const error = ref("");
+const rejoinLoading = ref<string | null>(null);
+const removingParticipant = ref<string | null>(null);
+const editingSession = ref<SessionSummary | null>(null);
 
 onMounted(async () => {
   try {
@@ -20,12 +29,42 @@ onMounted(async () => {
   }
 });
 
+async function reload() {
+  const data = await getMySessions();
+  hosted.value = data.hosted;
+  joined.value = data.joined;
+}
+
 async function remove(roomCode: string) {
   try {
     await deleteSession(roomCode);
     hosted.value = hosted.value.filter((s) => s.room_code !== roomCode);
   } catch {
     error.value = "Could not delete session.";
+  }
+}
+
+async function rejoin(roomCode: string, name: string) {
+  error.value = "";
+  rejoinLoading.value = roomCode;
+  try {
+    await store.join(roomCode, name);
+  } catch {
+    error.value = "Could not rejoin session.";
+  } finally {
+    rejoinLoading.value = null;
+  }
+}
+
+async function kickParticipant(roomCode: string, userName: string) {
+  removingParticipant.value = `${roomCode}:${userName}`;
+  try {
+    await store.removeParticipant(roomCode, userName);
+    await reload();
+  } catch {
+    error.value = "Could not remove participant.";
+  } finally {
+    removingParticipant.value = null;
   }
 }
 
@@ -60,21 +99,62 @@ const statusLabel: Record<string, string> = {
           <li
             v-for="s in hosted"
             :key="s.room_code"
-            class="flex items-center justify-between gap-3 rounded-xl border border-stone-100 bg-white px-4 py-3"
+            class="rounded-xl border border-stone-100 bg-white px-4 py-3"
           >
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-stone-800">{{ s.location_text ?? "No location" }}</p>
-              <p class="text-xs text-stone-400">
-                {{ formatDate(s.created_at) }} · {{ s.participant_count }} participant{{ s.participant_count !== 1 ? "s" : "" }}
-                · <span :class="s.status === 'active' ? 'text-green-600' : 'text-stone-400'">{{ statusLabel[s.status] ?? s.status }}</span>
-              </p>
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-stone-800">{{ s.location_text ?? "No location" }}</p>
+                <p class="text-xs text-stone-400">
+                  {{ formatDate(s.created_at) }} · {{ s.participant_count }} participant{{ s.participant_count !== 1 ? "s" : "" }}
+                  · <span :class="s.status === 'active' ? 'text-green-600' : 'text-stone-400'">{{ statusLabel[s.status] ?? s.status }}</span>
+                </p>
+              </div>
+              <div class="flex shrink-0 flex-wrap justify-end gap-2">
+                <button
+                  v-if="s.status !== 'ended'"
+                  :disabled="rejoinLoading === s.room_code"
+                  class="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50"
+                  @click="rejoin(s.room_code, s.host_name)"
+                >
+                  {{ rejoinLoading === s.room_code ? "Joining..." : "Rejoin" }}
+                </button>
+                <button
+                  v-if="s.status === 'waiting'"
+                  class="rounded-lg border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600 transition-colors hover:border-stone-300 hover:text-stone-800"
+                  @click="editingSession = s"
+                >
+                  Edit Filters
+                </button>
+                <button
+                  class="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+                  @click="remove(s.room_code)"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <button
-              class="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
-              @click="remove(s.room_code)"
-            >
-              Delete
-            </button>
+
+            <!-- Participant management for waiting sessions -->
+            <div v-if="s.status === 'waiting' && s.participants?.length" class="mt-3 border-t border-stone-100 pt-3">
+              <p class="mb-1.5 text-xs font-medium text-stone-400">Participants</p>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="p in s.participants"
+                  :key="p.user_name"
+                  class="inline-flex items-center gap-1 rounded-full bg-stone-50 px-2.5 py-1 text-xs text-stone-600"
+                >
+                  {{ p.user_name }}
+                  <span v-if="p.user_name === s.host_name" class="text-orange-400">·host</span>
+                  <button
+                    v-else
+                    :disabled="removingParticipant === `${s.room_code}:${p.user_name}`"
+                    class="ml-0.5 text-stone-300 transition-colors hover:text-red-500 disabled:opacity-40"
+                    :aria-label="`Remove ${p.user_name}`"
+                    @click="kickParticipant(s.room_code, p.user_name)"
+                  >×</button>
+                </span>
+              </div>
+            </div>
           </li>
         </ul>
       </div>
@@ -94,9 +174,30 @@ const statusLabel: Record<string, string> = {
                 · <span :class="s.status === 'active' ? 'text-green-600' : 'text-stone-400'">{{ statusLabel[s.status] ?? s.status }}</span>
               </p>
             </div>
+            <button
+              v-if="s.status !== 'ended'"
+              :disabled="rejoinLoading === s.room_code"
+              class="shrink-0 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50"
+              @click="rejoin(s.room_code, s.my_participant_name ?? auth.displayName)"
+            >
+              {{ rejoinLoading === s.room_code ? "Joining..." : "Rejoin" }}
+            </button>
           </li>
         </ul>
       </div>
     </div>
   </section>
+
+  <EditFiltersModal
+    v-if="editingSession"
+    :room-code="editingSession.room_code"
+    :initial="{
+      location_text: editingSession.location_text,
+      cuisine: editingSession.cuisine,
+      price: editingSession.price,
+      radius_meters: editingSession.radius_meters,
+    }"
+    @close="editingSession = null"
+    @saved="reload(); editingSession = null"
+  />
 </template>

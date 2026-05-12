@@ -14,6 +14,13 @@ import type {
   VoteResponse,
 } from "../types";
 
+export interface UpdateFiltersPayload {
+  location_text?: string | null;
+  cuisine?: string | null;
+  price?: string | null;
+  radius_meters?: number | null;
+}
+
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 const api = axios.create({
@@ -101,6 +108,21 @@ export async function getMySessions(): Promise<MySessionsResponse> {
 
 export async function deleteSession(roomCode: string): Promise<void> {
   await api.delete(`/sessions/${roomCode}`);
+}
+
+export async function updateSessionFilters(
+  roomCode: string,
+  payload: UpdateFiltersPayload,
+): Promise<SessionResponse> {
+  const { data } = await api.patch<SessionResponse>(`/sessions/${roomCode}`, payload);
+  return data;
+}
+
+export async function removeSessionParticipant(
+  roomCode: string,
+  userName: string,
+): Promise<void> {
+  await api.delete(`/sessions/${roomCode}/participants/${encodeURIComponent(userName)}`);
 }
 
 export async function getPopularDishes(

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import axios from "axios";
+import { useAuthStore } from "./auth";
 
 import {
   createSession,
@@ -8,9 +9,12 @@ import {
   getSessionResults,
   getSession,
   joinSession,
+  removeSessionParticipant,
   startSession,
   submitVote,
+  updateSessionFilters,
 } from "../lib/api";
+import type { UpdateFiltersPayload } from "../lib/api";
 import type {
   CreateSessionRequest,
   RestaurantCard,
@@ -53,11 +57,14 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
+  const auth = useAuthStore();
+
   const isHost = computed(() => {
-    if (!session.value || !currentUser.value) {
-      return false;
+    if (!session.value) return false;
+    if (auth.user?.id && session.value.owner_user_id) {
+      return session.value.owner_user_id === auth.user.id;
     }
-    return session.value.host_name === currentUser.value;
+    return Boolean(currentUser.value) && session.value.host_name === currentUser.value;
   });
 
   async function handle<T>(op: () => Promise<T>): Promise<T> {
@@ -230,6 +237,16 @@ export const useSessionStore = defineStore("session", () => {
     showResults.value = false;
   }
 
+  async function updateFilters(roomCode: string, payload: UpdateFiltersPayload): Promise<void> {
+    const data = await handle(() => updateSessionFilters(roomCode, payload));
+    if (session.value?.room_code === roomCode) session.value = data;
+  }
+
+  async function removeParticipant(roomCode: string, userName: string): Promise<void> {
+    await handle(() => removeSessionParticipant(roomCode, userName));
+    await refresh();
+  }
+
   function resetState(): void {
     session.value = null;
     currentUser.value = "";
@@ -289,5 +306,7 @@ export const useSessionStore = defineStore("session", () => {
     openResults,
     closeResults,
     resetState,
+    updateFilters,
+    removeParticipant,
   };
 });
