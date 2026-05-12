@@ -126,7 +126,7 @@ const statusLabel: Record<string, string> = {
             :key="s.room_code"
             class="rounded-xl border border-stone-100 bg-white px-4 py-3"
           >
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div class="min-w-0">
                 <p class="truncate text-sm font-medium text-stone-800">{{ s.location_text ?? "No location" }}</p>
                 <p class="text-xs text-stone-400">
@@ -134,7 +134,7 @@ const statusLabel: Record<string, string> = {
                   · <span :class="s.status === 'active' ? 'text-green-600' : 'text-stone-400'">{{ statusLabel[s.status] ?? s.status }}</span>
                 </p>
               </div>
-              <div class="flex shrink-0 flex-wrap justify-end gap-2">
+              <div class="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
                 <button
                   v-if="s.status !== 'ended'"
                   :disabled="rejoinLoading === s.room_code"
