@@ -7,10 +7,13 @@ import { validateLocation } from "../lib/api";
 interface NominatimResult {
   display_name: string;
   address?: {
+    neighbourhood?: string;
+    quarter?: string;
+    borough?: string;
+    suburb?: string;
     city?: string;
     town?: string;
     village?: string;
-    suburb?: string;
     state?: string;
     country?: string;
     country_code?: string;
@@ -45,10 +48,15 @@ const hasErrors = computed(() => hostNameInvalid.value || locationInvalid.value)
 function formatSuggestion(r: NominatimResult): string {
   const a = r.address;
   if (!a) return r.display_name;
-  const city = a.city ?? a.town ?? a.village ?? a.suburb;
   const region = a.state ?? a.country;
-  if (city && region) return `${city}, ${region}`;
-  if (city) return city;
+  const specific = a.neighbourhood ?? a.quarter;
+  if (specific) {
+    const mid = a.borough ?? a.suburb ?? a.city ?? a.town ?? a.village;
+    return [specific, mid, region].filter(Boolean).join(", ");
+  }
+  const locality = a.borough ?? a.suburb ?? a.city ?? a.town ?? a.village;
+  if (locality && region) return `${locality}, ${region}`;
+  if (locality) return locality;
   return r.display_name.split(",").slice(0, 2).join(",").trim();
 }
 
