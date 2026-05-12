@@ -8,6 +8,10 @@ import type { PopularDishItem, ReviewItem } from "../types";
 
 const store = useSessionStore();
 let socket: WebSocket | null = null;
+const copied = ref(false);
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 5;
+let destroyed = false;
 
 const photoIndex = ref(0);
 const showHours = ref(false);
@@ -236,8 +240,27 @@ function buildWsUrl(roomCode: string): string {
   return `${wsBase}/ws/sessions/${roomCode}`;
 }
 
+async function copyRoomCode(code: string) {
+  await navigator.clipboard.writeText(code);
+  copied.value = true;
+  setTimeout(() => { copied.value = false; }, 2000);
+}
+
 function connectSocket(roomCode: string) {
   socket = new WebSocket(buildWsUrl(roomCode));
+
+  socket.onopen = () => {
+    reconnectAttempts = 0;
+  };
+
+  socket.onclose = () => {
+    if (!destroyed && reconnectAttempts < MAX_RECONNECT) {
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
+      reconnectAttempts++;
+      setTimeout(() => connectSocket(roomCode), delay);
+    }
+  };
+
   socket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data) as {
@@ -291,6 +314,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  destroyed = true;
   window.removeEventListener("keydown", handleKeydown);
   socket?.close();
   if (celebrationTimer) clearTimeout(celebrationTimer);
@@ -542,6 +566,13 @@ onUnmounted(() => {
       <div class="flex items-center gap-3">
         <h2 class="section-title text-stone-900">Swipe Deck</h2>
         <span class="status-pill">Room: {{ store.session?.room_code }}</span>
+        <button
+          v-if="store.session"
+          class="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700"
+          @click="copyRoomCode(store.session.room_code)"
+        >
+          {{ copied ? "Copied!" : "Copy Code" }}
+        </button>
       </div>
       <div class="flex items-center gap-2">
         <button

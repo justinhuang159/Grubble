@@ -240,6 +240,9 @@ function carouselTouchEnd(e: TouchEvent, id: number, photos: { url: string; capt
 }
 
 let socket: WebSocket | null = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 5;
+let destroyed = false;
 
 function buildWsUrl(roomCode: string): string {
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -249,6 +252,19 @@ function buildWsUrl(roomCode: string): string {
 
 function connectSocket(roomCode: string) {
   socket = new WebSocket(buildWsUrl(roomCode));
+
+  socket.onopen = () => {
+    reconnectAttempts = 0;
+  };
+
+  socket.onclose = () => {
+    if (!destroyed && reconnectAttempts < MAX_RECONNECT) {
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
+      reconnectAttempts++;
+      setTimeout(() => connectSocket(roomCode), delay);
+    }
+  };
+
   socket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data) as {
@@ -302,6 +318,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  destroyed = true;
   window.removeEventListener("keydown", handleKeydown);
   socket?.close();
 });

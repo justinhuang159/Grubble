@@ -9,9 +9,13 @@ const store = useSessionStore();
 const startLoading = ref(false);
 const showEditFilters = ref(false);
 const removingParticipant = ref<string | null>(null);
+const copied = ref(false);
 let timer: ReturnType<typeof setInterval> | null = null;
 let socket: WebSocket | null = null;
 const socketConnected = ref(false);
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 5;
+let destroyed = false;
 
 const participantCount = computed(() => store.session?.participants.length ?? 0);
 
@@ -21,15 +25,27 @@ function buildWsUrl(roomCode: string): string {
   return `${wsBase}/ws/sessions/${roomCode}`;
 }
 
+async function copyRoomCode(code: string) {
+  await navigator.clipboard.writeText(code);
+  copied.value = true;
+  setTimeout(() => { copied.value = false; }, 2000);
+}
+
 function connectSocket(roomCode: string) {
   socket = new WebSocket(buildWsUrl(roomCode));
 
   socket.onopen = () => {
     socketConnected.value = true;
+    reconnectAttempts = 0;
   };
 
   socket.onclose = () => {
     socketConnected.value = false;
+    if (!destroyed && reconnectAttempts < MAX_RECONNECT) {
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000);
+      reconnectAttempts++;
+      setTimeout(() => connectSocket(roomCode), delay);
+    }
   };
 
   socket.onmessage = (event) => {
@@ -83,9 +99,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (timer) {
-    clearInterval(timer);
-  }
+  destroyed = true;
+  if (timer) clearInterval(timer);
   socket?.close();
 });
 </script>
@@ -98,6 +113,12 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center gap-3">
         <span class="status-pill">Room: {{ store.session.room_code }}</span>
+        <button
+          class="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700"
+          @click="copyRoomCode(store.session.room_code)"
+        >
+          {{ copied ? "Copied!" : "Copy Code" }}
+        </button>
         <button
           class="app-button"
           @click="store.resetState()"
