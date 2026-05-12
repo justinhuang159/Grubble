@@ -529,9 +529,9 @@ onUnmounted(() => {
   </Teleport>
 
   <section class="glass-card">
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
           <h2 class="section-title text-stone-900">Session Results</h2>
           <span class="status-pill">Room: {{ store.session?.room_code }}</span>
         </div>
