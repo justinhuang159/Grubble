@@ -562,17 +562,19 @@ onUnmounted(() => {
   </Teleport>
 
   <section class="glass-card">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <h2 class="section-title text-stone-900">Swipe Deck</h2>
-        <span class="status-pill">Room: {{ store.session?.room_code }}</span>
-        <button
-          v-if="store.session"
-          class="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700"
-          @click="copyRoomCode(store.session.room_code)"
-        >
-          {{ copied ? "Copied!" : "Copy Code" }}
-        </button>
+        <div class="flex items-center gap-2">
+          <span class="status-pill">Room: {{ store.session?.room_code }}</span>
+          <button
+            v-if="store.session"
+            class="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700"
+            @click="copyRoomCode(store.session.room_code)"
+          >
+            {{ copied ? "Copied!" : "Copy Code" }}
+          </button>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <button
