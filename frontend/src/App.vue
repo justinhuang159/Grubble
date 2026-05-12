@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import AccountSettingsModal from "./views/AccountSettingsModal.vue";
 import AuthView from "./views/AuthView.vue";
@@ -19,9 +19,46 @@ const showSettings = ref(false);
 
 const inSession = computed(() => Boolean(store.session));
 const inActiveSession = computed(() => store.session?.status === "active");
+
+let kickDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => store.kickNotification,
+  (msg) => {
+    if (msg) {
+      if (kickDismissTimer) clearTimeout(kickDismissTimer);
+      kickDismissTimer = setTimeout(() => {
+        store.kickNotification = null;
+      }, 5000);
+    }
+  },
+);
 </script>
 
 <template>
+  <Teleport to="body">
+    <Transition name="toast">
+      <div
+        v-if="store.kickNotification"
+        class="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-red-200 bg-white px-5 py-3.5 shadow-lg"
+      >
+        <svg class="h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <span class="text-sm font-medium text-stone-700">{{ store.kickNotification }}</span>
+        <button
+          class="ml-1 text-stone-300 transition-colors hover:text-stone-500"
+          aria-label="Dismiss"
+          @click="store.kickNotification = null"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
+  </Teleport>
+
   <main class="app-shell min-h-screen">
     <div class="hero-panel">
       <div class="flex items-start justify-between gap-4">

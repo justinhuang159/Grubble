@@ -37,9 +37,13 @@ function connectSocket(roomCode: string) {
       const message = JSON.parse(event.data) as {
         event?: string;
         session?: SessionResponse;
+        user_name?: string;
       };
       if (message.event === "session_started" && message.session) {
         store.setSession(message.session);
+      } else if (message.event === "participant_removed" && message.user_name === store.currentUser) {
+        store.kickNotification = "You were removed from the session by the host.";
+        store.resetState();
       }
     } catch {
       // Ignore malformed messages and rely on polling fallback.

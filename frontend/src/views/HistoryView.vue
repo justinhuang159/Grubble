@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { deleteSession, getMySessions } from "../lib/api";
 import type { SessionSummary } from "../types";
 import { useAuthStore } from "../stores/auth";
 import { useSessionStore } from "../stores/session";
-import EditFiltersModal from "./EditFiltersModal.vue";
 
 const auth = useAuthStore();
 const store = useSessionStore();
@@ -15,7 +14,23 @@ const loading = ref(true);
 const error = ref("");
 const rejoinLoading = ref<string | null>(null);
 const removingParticipant = ref<string | null>(null);
-const editingSession = ref<SessionSummary | null>(null);
+const expandedParticipants = ref<Set<string>>(new Set());
+
+function toggleParticipants(roomCode: string) {
+  const next = new Set(expandedParticipants.value);
+  if (next.has(roomCode)) {
+    next.delete(roomCode);
+  } else {
+    next.add(roomCode);
+  }
+  expandedParticipants.value = next;
+}
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function hasLiveSessions() {
+  return hosted.value.some((s) => s.status === "waiting" || s.status === "active");
+}
 
 onMounted(async () => {
   try {
@@ -27,6 +42,16 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+
+  pollTimer = setInterval(async () => {
+    if (hasLiveSessions()) {
+      await reload().catch(() => {});
+    }
+  }, 5000);
+});
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer);
 });
 
 async function reload() {
@@ -119,11 +144,11 @@ const statusLabel: Record<string, string> = {
                   {{ rejoinLoading === s.room_code ? "Joining..." : "Rejoin" }}
                 </button>
                 <button
-                  v-if="s.status === 'waiting'"
+                  v-if="s.participants?.length"
                   class="rounded-lg border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600 transition-colors hover:border-stone-300 hover:text-stone-800"
-                  @click="editingSession = s"
+                  @click="toggleParticipants(s.room_code)"
                 >
-                  Edit Filters
+                  {{ expandedParticipants.has(s.room_code) ? "Hide Participants" : "View Participants" }}
                 </button>
                 <button
                   class="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
@@ -135,7 +160,7 @@ const statusLabel: Record<string, string> = {
             </div>
 
             <!-- Participant management for waiting sessions -->
-            <div v-if="s.status === 'waiting' && s.participants?.length" class="mt-3 border-t border-stone-100 pt-3">
+            <div v-if="s.participants?.length && expandedParticipants.has(s.room_code)" class="mt-3 border-t border-stone-100 pt-3">
               <p class="mb-1.5 text-xs font-medium text-stone-400">Participants</p>
               <div class="flex flex-wrap gap-1.5">
                 <span
@@ -188,16 +213,4 @@ const statusLabel: Record<string, string> = {
     </div>
   </section>
 
-  <EditFiltersModal
-    v-if="editingSession"
-    :room-code="editingSession.room_code"
-    :initial="{
-      location_text: editingSession.location_text,
-      cuisine: editingSession.cuisine,
-      price: editingSession.price,
-      radius_meters: editingSession.radius_meters,
-    }"
-    @close="editingSession = null"
-    @saved="reload(); editingSession = null"
-  />
 </template>

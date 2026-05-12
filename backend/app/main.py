@@ -582,7 +582,7 @@ def update_session_filters(
 
 
 @app.delete("/sessions/{room_code}/participants/{user_name}", status_code=204)
-def remove_participant(
+async def remove_participant(
     room_code: str,
     user_name: str,
     db: Session = Depends(get_db),
@@ -603,8 +603,19 @@ def remove_participant(
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
 
+    db.execute(
+        delete(Vote).where(
+            Vote.session_id == session.id,
+            Vote.participant_name == user_name,
+        )
+    )
     db.delete(participant)
     db.commit()
+
+    await ws_manager.broadcast(room_code, {
+        "event": "participant_removed",
+        "user_name": user_name,
+    })
 
 
 @app.post("/sessions/{room_code}/join", response_model=SessionResponse)

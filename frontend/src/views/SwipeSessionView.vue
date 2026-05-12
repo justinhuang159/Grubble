@@ -248,6 +248,7 @@ function connectSocket(roomCode: string) {
         yes_votes_for_restaurant?: number;
         votes_submitted_for_restaurant?: number;
         total_participants?: number;
+        user_name?: string;
       };
       if (message.event === "match_found") {
         triggerCelebration(message.restaurant_name ?? "your restaurant", message.restaurant_image_url ?? null);
@@ -264,6 +265,9 @@ function connectSocket(roomCode: string) {
           votes_submitted_for_restaurant: message.votes_submitted_for_restaurant,
           total_participants: message.total_participants,
         });
+      } else if (message.event === "participant_removed" && message.user_name === store.currentUser) {
+        store.kickNotification = "You were removed from the session by the host.";
+        store.resetState();
       }
     } catch {
       // ignore malformed messages

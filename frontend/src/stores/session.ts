@@ -37,6 +37,7 @@ export const useSessionStore = defineStore("session", () => {
   const resultsLoading = ref(false);
   const showResults = ref(false);
   const voteProgress = ref<{ yes_votes: number; total_votes: number; total_participants: number } | null>(null);
+  const kickNotification = ref<string | null>(null);
 
   function hydrateFromStorage(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -228,6 +229,16 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
+  async function refreshResults(): Promise<void> {
+    if (!session.value) return;
+    try {
+      const data = await getSessionResults(session.value.room_code);
+      results.value = data;
+    } catch {
+      // silently ignore — stale data is better than an error flash
+    }
+  }
+
   async function openResults(): Promise<void> {
     await loadResults();
     showResults.value = true;
@@ -293,6 +304,7 @@ export const useSessionStore = defineStore("session", () => {
     resultsLoading,
     showResults,
     voteProgress,
+    kickNotification,
     isHost,
     create,
     join,
@@ -303,6 +315,7 @@ export const useSessionStore = defineStore("session", () => {
     vote,
     updateVoteProgress,
     loadResults,
+    refreshResults,
     openResults,
     closeResults,
     resetState,
