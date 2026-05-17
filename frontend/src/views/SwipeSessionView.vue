@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { getPopularDishes, getReviews } from "../lib/api";
 import { formatRestaurantPrice } from "../lib/restaurant";
@@ -130,6 +130,88 @@ async function openDishesModal() {
   } finally {
     dishesLoading.value = false;
   }
+}
+
+// Drag-to-vote
+const dragX = ref(0);
+const isDragging = ref(false);
+let dragStartX = 0;
+let dragStartY = 0;
+let dragPointerId = -1;
+let dragDetermined = false;
+let dragIsHorizontal = false;
+const SWIPE_THRESHOLD = 100;
+
+const cardDragStyle = computed(() => {
+  const base = {
+    touchAction: 'pan-y' as const,
+  };
+  if (isDragging.value) {
+    return {
+      ...base,
+      transform: `translateX(${dragX.value}px) rotate(${dragX.value * 0.04}deg)`,
+      transition: 'none',
+      userSelect: 'none' as const,
+    };
+  }
+  return {
+    ...base,
+    transform: `translateX(${dragX.value}px) rotate(${dragX.value * 0.04}deg)`,
+    transition: 'transform 0.3s ease',
+  };
+});
+
+function onCardPointerDown(e: PointerEvent) {
+  if (store.voteLoading) return;
+  const target = e.target as HTMLElement;
+  if (target.closest('button, a, input, select, textarea, .no-drag-zone')) return;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragPointerId = e.pointerId;
+  dragDetermined = false;
+  dragIsHorizontal = false;
+}
+
+function onCardPointerMove(e: PointerEvent) {
+  if (e.pointerId !== dragPointerId) return;
+  const el = e.currentTarget as HTMLElement;
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+  if (!dragDetermined) {
+    if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    dragDetermined = true;
+    dragIsHorizontal = Math.abs(dx) > Math.abs(dy);
+    if (dragIsHorizontal) {
+      el.setPointerCapture(e.pointerId);
+    } else {
+      dragPointerId = -1;
+      return;
+    }
+  }
+  if (!dragIsHorizontal) return;
+  isDragging.value = true;
+  dragX.value = dx;
+}
+
+function onCardPointerUp(e: PointerEvent) {
+  if (e.pointerId !== dragPointerId) return;
+  dragPointerId = -1;
+  if (!isDragging.value) return;
+  const dx = dragX.value;
+  isDragging.value = false;
+  if (Math.abs(dx) >= SWIPE_THRESHOLD && !store.voteLoading) {
+    dragX.value = 0;
+    store.vote(dx > 0 ? 'yes' : 'no');
+  } else {
+    nextTick(() => { dragX.value = 0; });
+  }
+}
+
+function onCardPointerCancel(e: PointerEvent) {
+  if (e.pointerId !== dragPointerId) return;
+  dragPointerId = -1;
+  isDragging.value = false;
+  nextTick(() => { dragX.value = 0; });
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -590,13 +672,41 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="store.currentRestaurant" class="mt-6 overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/70 p-4 shadow-[0_20px_40px_rgba(28,25,23,0.08)]">
+    <div
+      v-if="store.currentRestaurant"
+      class="relative mt-6 overflow-hidden rounded-[1.75rem] border border-orange-950/10 bg-white/70 p-4 shadow-[0_20px_40px_rgba(28,25,23,0.08)]"
+      :style="cardDragStyle"
+      @pointerdown="onCardPointerDown"
+      @pointermove="onCardPointerMove"
+      @pointerup="onCardPointerUp"
+      @pointercancel="onCardPointerCancel"
+    >
+      <!-- Swipe vote hints -->
+      <div
+        v-if="isDragging && dragX > 20"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+      >
+        <span
+          class="rounded-2xl border-[5px] border-emerald-500 px-6 py-3 text-5xl font-black uppercase tracking-widest text-emerald-500"
+          :style="{ transform: 'rotate(-12deg)', opacity: Math.min(1, (dragX - 20) / 80) }"
+        >YES</span>
+      </div>
+      <div
+        v-if="isDragging && dragX < -20"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+      >
+        <span
+          class="rounded-2xl border-[5px] border-rose-500 px-6 py-3 text-5xl font-black uppercase tracking-widest text-rose-500"
+          :style="{ transform: 'rotate(12deg)', opacity: Math.min(1, (-dragX - 20) / 80) }"
+        >NO</span>
+      </div>
+
       <div class="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
 
         <!-- Square photo carousel + popular dishes -->
         <div class="flex flex-col gap-2">
         <div
-          class="relative aspect-square overflow-hidden rounded-[1.5rem] bg-stone-100"
+          class="no-drag-zone relative aspect-square overflow-hidden rounded-[1.5rem] bg-stone-100"
           @touchstart.passive="carouselTouchStart"
           @touchend="carouselTouchEnd"
         >

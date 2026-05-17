@@ -60,7 +60,7 @@
   }
 
   .hero-panel {
-    @apply relative overflow-hidden rounded-[2rem] border px-6 py-8 shadow-[0_28px_80px_rgba(120,53,15,0.10)] sm:px-8 sm:py-10;
+    @apply relative rounded-[2rem] border px-6 py-8 shadow-[0_28px_80px_rgba(120,53,15,0.10)] sm:px-8 sm:py-10;
     background: linear-gradient(135deg, rgba(255, 251, 247, 0.95), rgba(255, 245, 235, 0.86));
     border-color: var(--card-border);
     backdrop-filter: blur(14px);
@@ -69,7 +69,7 @@
   .hero-panel::before {
     content: "";
     position: absolute;
-    inset: auto -8% -35% auto;
+    inset: auto 0 0 auto;
     width: 18rem;
     height: 18rem;
     border-radius: 9999px;
